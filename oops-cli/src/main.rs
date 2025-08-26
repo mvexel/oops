@@ -89,9 +89,9 @@ async fn analyze_command(
         }
         let reader = PbfReader::new();
         let filter = if let Some(bbox) = &query_bbox {
-            Some(PbfFilter::new().in_bbox(bbox).limit(10000))
+            Some(PbfFilter::new().in_bbox(bbox))
         } else {
-            Some(PbfFilter::new().limit(10000))
+            None
         };
         reader.read_file(&pbf_path, filter).await?
     } else {

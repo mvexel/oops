@@ -4,6 +4,7 @@ use osmpbf::{Element, ElementReader};
 use std::collections::HashMap;
 use std::path::Path;
 
+
 pub trait ProgressReporter {
     fn report_progress(&self, processed: usize, message: &str);
 }
@@ -55,12 +56,6 @@ impl PbfReader {
 
         reader.for_each(|element| {
             total_processed += 1;
-            // Check limit
-            if let Some(limit) = filter.limit {
-                if count >= limit {
-                    return;
-                }
-            }
 
             match element {
                 Element::Node(node) => {
@@ -78,7 +73,6 @@ impl PbfReader {
                             .collect(),
                     };
 
-                    // Apply filters
                     if !self.node_matches_filter(&osm_node, &filter) {
                         return;
                     }
@@ -261,7 +255,6 @@ pub struct PbfFilter {
     pub include_relations: bool,
     pub bbox: Option<BoundingBox>,
     pub required_tags: HashMap<String, Option<String>>,
-    pub limit: Option<usize>,
 }
 
 impl Default for PbfFilter {
@@ -272,7 +265,6 @@ impl Default for PbfFilter {
             include_relations: true,
             bbox: None,
             required_tags: HashMap::new(),
-            limit: None,
         }
     }
 }
@@ -314,10 +306,7 @@ impl PbfFilter {
         self
     }
 
-    pub fn limit(mut self, max_elements: usize) -> Self {
-        self.limit = Some(max_elements);
-        self
-    }
+    
 }
 
 pub struct PbfElementStream {
