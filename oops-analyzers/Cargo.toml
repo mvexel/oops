@@ -1,0 +1,9 @@
+[package]
+name = "oops-analyzers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oops-core = { path = "../oops-core" }
+oops-spatial = { path = "../oops-spatial" }
+serde = { workspace = true }

@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "oops-core",
+    "oops-ingest", 
+    "oops-spatial",
+    "oops-analyzers",
+    "oops-cli"
+]
+resolver = "2"
+
+[workspace.dependencies]
+geo = "0.28"
+rstar = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+reqwest = { version = "0.12", features = ["json"] }
+osmpbf = "0.3"
+petgraph = "0.6"
+clap = { version = "4.0", features = ["derive"] }
+tracing = "0.1"

@@ -1,0 +1,12 @@
+[package]
+name = "oops-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oops-core = { path = "../oops-core" }
+oops-ingest = { path = "../oops-ingest" }
+oops-analyzers = { path = "../oops-analyzers" }
+clap = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }

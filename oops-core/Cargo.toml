@@ -1,0 +1,10 @@
+[package]
+name = "oops-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+geo = { workspace = true }
+rstar = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
