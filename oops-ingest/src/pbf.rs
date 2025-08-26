@@ -1,6 +1,6 @@
 use crate::Result;
-use oops_core::{OsmData, OsmNode, OsmWay, OsmRelation, BoundingBox, RelationMember, MemberType};
-use osmpbf::{ElementReader, Element};
+use oops_core::{BoundingBox, MemberType, OsmData, OsmNode, OsmRelation, OsmWay, RelationMember};
+use osmpbf::{Element, ElementReader};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -31,27 +31,28 @@ impl PbfReader {
     pub fn new() -> Self {
         Self {}
     }
-    
+
     pub async fn read_file<P: AsRef<Path>>(
-        &self, 
-        path: P, 
-        filter: Option<PbfFilter>
-    ) -> Result<OsmData> {
-        self.read_file_with_progress(path, filter, &NoOpProgress).await
-    }
-    
-    pub async fn read_file_with_progress<P: AsRef<Path>>(
-        &self, 
-        path: P, 
+        &self,
+        path: P,
         filter: Option<PbfFilter>,
-        progress: &dyn ProgressReporter
+    ) -> Result<OsmData> {
+        self.read_file_with_progress(path, filter, &NoOpProgress)
+            .await
+    }
+
+    pub async fn read_file_with_progress<P: AsRef<Path>>(
+        &self,
+        path: P,
+        filter: Option<PbfFilter>,
+        progress: &dyn ProgressReporter,
     ) -> Result<OsmData> {
         let filter = filter.unwrap_or_default();
         let reader = ElementReader::from_path(path)?;
         let mut osm_data = OsmData::new();
         let mut count = 0;
         let mut total_processed = 0;
-        
+
         reader.for_each(|element| {
             total_processed += 1;
             // Check limit
@@ -60,25 +61,28 @@ impl PbfReader {
                     return;
                 }
             }
-            
+
             match element {
                 Element::Node(node) => {
                     if !filter.include_nodes {
                         return;
                     }
-                    
+
                     let osm_node = OsmNode {
                         id: node.id(),
                         lat: node.lat(),
                         lon: node.lon(),
-                        tags: node.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: node
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
-                    
+
                     // Apply filters
                     if !self.node_matches_filter(&osm_node, &filter) {
                         return;
                     }
-                    
+
                     osm_data.add_node(osm_node);
                     count += 1;
                     progress.report_progress(total_processed, &format!("Added {} elements", count));
@@ -87,18 +91,21 @@ impl PbfReader {
                     if !filter.include_nodes {
                         return;
                     }
-                    
+
                     let osm_node = OsmNode {
                         id: node.id(),
                         lat: node.lat(),
                         lon: node.lon(),
-                        tags: node.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: node
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
-                    
+
                     if !self.node_matches_filter(&osm_node, &filter) {
                         return;
                     }
-                    
+
                     osm_data.add_node(osm_node);
                     count += 1;
                     progress.report_progress(total_processed, &format!("Added {} elements", count));
@@ -107,17 +114,20 @@ impl PbfReader {
                     if !filter.include_ways {
                         return;
                     }
-                    
+
                     let osm_way = OsmWay {
                         id: way.id(),
                         nodes: way.refs().collect(),
-                        tags: way.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: way
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
-                    
+
                     if !self.way_matches_filter(&osm_way, &filter) {
                         return;
                     }
-                    
+
                     osm_data.ways.insert(osm_way.id, osm_way);
                     count += 1;
                     progress.report_progress(total_processed, &format!("Added {} elements", count));
@@ -126,9 +136,10 @@ impl PbfReader {
                     if !filter.include_relations {
                         return;
                     }
-                    
-                    let members = relation.members().map(|member| {
-                        RelationMember {
+
+                    let members = relation
+                        .members()
+                        .map(|member| RelationMember {
                             member_type: match member.member_type {
                                 osmpbf::RelMemberType::Node => MemberType::Node,
                                 osmpbf::RelMemberType::Way => MemberType::Way,
@@ -136,34 +147,37 @@ impl PbfReader {
                             },
                             member_id: member.member_id,
                             role: member.role().unwrap_or("").to_string(),
-                        }
-                    }).collect();
-                    
+                        })
+                        .collect();
+
                     let osm_relation = OsmRelation {
                         id: relation.id(),
                         members,
-                        tags: relation.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: relation
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
-                    
+
                     if !self.relation_matches_filter(&osm_relation, &filter) {
                         return;
                     }
-                    
+
                     osm_data.relations.insert(osm_relation.id, osm_relation);
                     count += 1;
                     progress.report_progress(total_processed, &format!("Added {} elements", count));
                 }
             }
         })?;
-        
+
         Ok(osm_data)
     }
-    
+
     /// Stream elements one by one without loading everything into memory
     pub fn stream_file<P: AsRef<Path>>(
         &self,
         path: P,
-        filter: Option<PbfFilter>
+        filter: Option<PbfFilter>,
     ) -> Result<PbfElementStream> {
         let reader = ElementReader::from_path(path)?;
         Ok(PbfElementStream {
@@ -171,7 +185,7 @@ impl PbfReader {
             filter: filter.unwrap_or_default(),
         })
     }
-    
+
     fn node_matches_filter(&self, node: &OsmNode, filter: &PbfFilter) -> bool {
         // Check bbox
         if let Some(bbox) = &filter.bbox {
@@ -179,7 +193,7 @@ impl PbfReader {
                 return false;
             }
         }
-        
+
         // Check required tags
         for (key, value) in &filter.required_tags {
             match value {
@@ -195,10 +209,10 @@ impl PbfReader {
                 }
             }
         }
-        
+
         true
     }
-    
+
     fn way_matches_filter(&self, way: &OsmWay, filter: &PbfFilter) -> bool {
         // Check required tags
         for (key, value) in &filter.required_tags {
@@ -215,10 +229,10 @@ impl PbfReader {
                 }
             }
         }
-        
+
         true
     }
-    
+
     fn relation_matches_filter(&self, relation: &OsmRelation, filter: &PbfFilter) -> bool {
         // Check required tags
         for (key, value) in &filter.required_tags {
@@ -235,7 +249,7 @@ impl PbfReader {
                 }
             }
         }
-        
+
         true
     }
 }
@@ -267,38 +281,39 @@ impl PbfFilter {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn nodes_only(mut self) -> Self {
         self.include_nodes = true;
         self.include_ways = false;
         self.include_relations = false;
         self
     }
-    
+
     pub fn ways_only(mut self) -> Self {
         self.include_nodes = false;
         self.include_ways = true;
         self.include_relations = false;
         self
     }
-    
+
     pub fn relations_only(mut self) -> Self {
         self.include_nodes = false;
         self.include_ways = false;
         self.include_relations = true;
         self
     }
-    
+
     pub fn in_bbox(mut self, bbox: &BoundingBox) -> Self {
         self.bbox = Some(bbox.clone());
         self
     }
-    
+
     pub fn with_tag(mut self, key: &str, value: Option<&str>) -> Self {
-        self.required_tags.insert(key.to_string(), value.map(|v| v.to_string()));
+        self.required_tags
+            .insert(key.to_string(), value.map(|v| v.to_string()));
         self
     }
-    
+
     pub fn limit(mut self, max_elements: usize) -> Self {
         self.limit = Some(max_elements);
         self
@@ -322,7 +337,10 @@ impl PbfElementStream {
                         id: node.id(),
                         lat: node.lat(),
                         lon: node.lon(),
-                        tags: node.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: node
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
                     callback(StreamElement::Node(osm_node));
                 }
@@ -331,7 +349,10 @@ impl PbfElementStream {
                         id: node.id(),
                         lat: node.lat(),
                         lon: node.lon(),
-                        tags: node.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: node
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
                     callback(StreamElement::Node(osm_node));
                 }
@@ -339,13 +360,17 @@ impl PbfElementStream {
                     let osm_way = OsmWay {
                         id: way.id(),
                         nodes: way.refs().collect(),
-                        tags: way.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: way
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
                     callback(StreamElement::Way(osm_way));
                 }
                 Element::Relation(relation) if self.filter.include_relations => {
-                    let members = relation.members().map(|member| {
-                        RelationMember {
+                    let members = relation
+                        .members()
+                        .map(|member| RelationMember {
                             member_type: match member.member_type {
                                 osmpbf::RelMemberType::Node => MemberType::Node,
                                 osmpbf::RelMemberType::Way => MemberType::Way,
@@ -353,13 +378,16 @@ impl PbfElementStream {
                             },
                             member_id: member.member_id,
                             role: member.role().unwrap_or("").to_string(),
-                        }
-                    }).collect();
-                    
+                        })
+                        .collect();
+
                     let osm_relation = OsmRelation {
                         id: relation.id(),
                         members,
-                        tags: relation.tags().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                        tags: relation
+                            .tags()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
                     };
                     callback(StreamElement::Relation(osm_relation));
                 }

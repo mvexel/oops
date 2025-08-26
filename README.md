@@ -4,12 +4,13 @@ A modular Rust toolkit for analyzing OpenStreetMap data quality issues with exte
 
 ## Features
 
-- Ingest data from Overpass API queries or PBF file parsing
-- Fast spatial queries for complex analysis use cases 
-- Plugin architecture for custom analyzers
-- Streaming parsers for large datasets
-- Generic analyzer framework 
-- **Real-time progress**: Progress reporting for long-running operations
+- **Command Line Interface**: Full-featured CLI with multiple output formats
+- **Data Ingestion**: Overpass API queries and PBF file parsing
+- **Spatial Analysis**: Fast intersection detection and spatial queries using the geo ecosystem
+- **Plugin Architecture**: Extensible analyzer system with registry
+- **Real Data Validation**: Integration tested with Salt Lake City OSM data
+- **Multiple Output Formats**: JSON, CSV, and human-readable summary formats
+- **Streaming Parsers**: Memory-efficient processing of large datasets
 
 ## Quick Start
 
@@ -19,6 +20,24 @@ A modular Rust toolkit for analyzing OpenStreetMap data quality issues with exte
 git clone https://github.com/mvexel/oops
 cd oops
 cargo build --release
+```
+
+### Command Line Usage
+
+```bash
+# List available analyzers
+cargo run --bin oops-cli -- list
+
+# Analyze a PBF file
+cargo run --bin oops-cli -- analyze --file data.osm.pbf --verbose
+
+# Different output formats
+cargo run --bin oops-cli -- analyze --file data.osm.pbf --format summary
+cargo run --bin oops-cli -- analyze --file data.osm.pbf --format csv
+cargo run --bin oops-cli -- analyze --file data.osm.pbf --format json
+
+# Run specific analyzer
+cargo run --bin oops-cli -- analyze --file data.osm.pbf --analyzer missing_street_names
 ```
 
 ### Basic Usage
@@ -97,7 +116,6 @@ impl Analyzer for RestaurantAnalyzer {
 oops/
 ├── oops-core/          # Core data structures and analysis framework
 ├── oops-ingest/        # Data ingestion (Overpass API, PBF files)
-├── oops-spatial/       # Geospatial operations and algorithms
 ├── oops-analyzers/     # Built-in quality analyzers
 └── oops-cli/          # Command line interface
 ```
@@ -132,11 +150,10 @@ cargo test test_pbf_reader_slc_small -- --ignored --nocapture
 
 ### Project Structure
 
-- **oops-core**: Fundamental data types (`OsmNode`, `OsmWay`, `OsmRelation`, `OsmData`)
-- **oops-ingest**: Data loading from Overpass API and PBF files
-- **oops-spatial**: Spatial operations, buffers, intersections (in progress)
-- **oops-analyzers**: Quality analysis implementations (planned)
-- **oops-cli**: Command-line interface (planned)
+- **oops-core**: Fundamental data types (`OsmNode`, `OsmWay`, `OsmRelation`, `OsmData`) + analyzer framework
+- **oops-ingest**: Data loading from Overpass API and PBF files  
+- **oops-analyzers**: Quality analysis implementations (includes MissingStreetNamesAnalyzer)
+- **oops-cli**: Command-line interface with multiple output formats
 
 ### Plugin System
 
@@ -209,6 +226,11 @@ let results = registry.analyze("my_analyzer", &query, &data)?;
 let all_results = registry.analyze_all(&query, &data);
 ```
 
+#### Built-in Analyzers
+
+Current analyzers available in `oops-analyzers`:
+- **MissingStreetNamesAnalyzer**: Finds intersections where connected roads lack name tags
+
 #### Plugin Examples
 
 See `oops-core/examples/plugin_system_demo.rs` for complete examples of:
@@ -226,6 +248,9 @@ cd oops-core && cargo run --example plugin_system_demo
 The project includes real OpenStreetMap data from Salt Lake City for testing:
 
 ```bash
+# Test built-in analyzer with real data
+cargo test test_missing_street_names_with_slc_data -- --ignored --nocapture
+
 # Test PBF parsing
 cargo test test_pbf_reader_slc_small -- --ignored --nocapture
 
@@ -234,6 +259,9 @@ cargo test test_pbf_streaming_slc -- --ignored --nocapture
 
 # Test Overpass API (requires internet)
 cargo test test_fetch_restaurants_integration -- --ignored --nocapture
+
+# Run analyzer registry integration
+cargo test test_analyzer_registry_integration
 ```
 
 ## Contributing

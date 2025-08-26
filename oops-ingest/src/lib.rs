@@ -37,18 +37,17 @@ mod tests {
         // Just test creation doesn't panic
     }
 
-    #[test] 
+    #[test]
     fn test_bbox_query_formatting() {
         let bbox = BoundingBox::new(13.4, 52.5, 13.5, 52.6);
-        
+
         // Test that we can format queries correctly
         let query = r#"node["amenity"="restaurant"]"#;
         let formatted = format!(
             "[out:json][bbox:{},{},{},{}];{};out meta;",
-            bbox.min_lat, bbox.min_lon, bbox.max_lat, bbox.max_lon,
-            query
+            bbox.min_lat, bbox.min_lon, bbox.max_lat, bbox.max_lon, query
         );
-        
+
         assert!(formatted.contains("bbox:52.5,13.4,52.6,13.5"));
         assert!(formatted.contains(r#"node["amenity"="restaurant"]"#));
         assert!(formatted.contains("out meta;"));
@@ -60,9 +59,11 @@ mod tests {
     async fn test_fetch_restaurants_integration() {
         let client = OverpassClient::new();
         let bbox = BoundingBox::new(13.4, 52.5, 13.41, 52.51); // Small Berlin area
-        
-        let result = client.fetch_in_bbox(&bbox, r#"node["amenity"="restaurant"]"#).await;
-        
+
+        let result = client
+            .fetch_in_bbox(&bbox, r#"node["amenity"="restaurant"]"#)
+            .await;
+
         match result {
             Ok(osm_data) => {
                 println!("Fetched {} nodes", osm_data.nodes.len());
@@ -75,28 +76,31 @@ mod tests {
             }
         }
     }
-    
+
     #[test]
     fn test_pbf_reader_creation() {
         let _reader = PbfReader::new();
         // Test creation doesn't panic
     }
-    
+
     #[test]
     fn test_pbf_filter_builder() {
         let filter = PbfFilter::new()
             .nodes_only()
             .with_tag("amenity", Some("restaurant"))
             .in_bbox(&BoundingBox::new(13.4, 52.5, 13.5, 52.6));
-            
+
         assert!(filter.include_nodes);
         assert!(!filter.include_ways);
         assert!(!filter.include_relations);
         assert!(filter.bbox.is_some());
         assert_eq!(filter.required_tags.len(), 1);
-        assert_eq!(filter.required_tags.get("amenity"), Some(&Some("restaurant".to_string())));
+        assert_eq!(
+            filter.required_tags.get("amenity"),
+            Some(&Some("restaurant".to_string()))
+        );
     }
-    
+
     #[test]
     fn test_progress_reporter() {
         let progress = ConsoleProgress;
@@ -104,41 +108,43 @@ mod tests {
         progress.report_progress(5000, "halfway"); // Should not print
         progress.report_progress(10000, "checkpoint"); // Should print
     }
-    
+
     // Integration test with Salt Lake City sample data
     #[tokio::test]
     #[ignore] // Run with: cargo test -- --ignored
     async fn test_pbf_reader_slc_small() {
         use std::path::Path;
-        
+
         let sample_pbf_path = "../sample_data/slc_small.osm.pbf";
-        
+
         if Path::new(sample_pbf_path).exists() {
             let reader = PbfReader::new();
             let filter = PbfFilter::new().limit(1000); // Limit for testing
-            
+
             let result = reader.read_file(sample_pbf_path, Some(filter)).await;
-            
+
             match result {
                 Ok(osm_data) => {
                     println!("SLC Small PBF Results:");
                     println!("  Nodes: {}", osm_data.nodes.len());
                     println!("  Ways: {}", osm_data.ways.len());
                     println!("  Relations: {}", osm_data.relations.len());
-                    
+
                     // Find some interesting elements
-                    let amenities: Vec<_> = osm_data.nodes.values()
+                    let amenities: Vec<_> = osm_data
+                        .nodes
+                        .values()
                         .filter(|n| n.tags.contains_key("amenity"))
                         .take(5)
                         .collect();
-                    
+
                     println!("  Sample amenities found: {}", amenities.len());
                     for amenity in amenities {
                         if let Some(amenity_type) = amenity.tags.get("amenity") {
                             println!("    {} at ({}, {})", amenity_type, amenity.lat, amenity.lon);
                         }
                     }
-                    
+
                     assert!(!osm_data.nodes.is_empty());
                 }
                 Err(e) => {
@@ -150,41 +156,44 @@ mod tests {
             println!("No SLC small PBF file found at {}", sample_pbf_path);
         }
     }
-    
+
     #[tokio::test]
-    #[ignore] // Run with: cargo test -- --ignored  
+    #[ignore] // Run with: cargo test -- --ignored
     async fn test_pbf_streaming_slc() {
         use std::path::Path;
-        
+
         let sample_pbf_path = "../sample_data/slc_small.osm.pbf";
-        
+
         if Path::new(sample_pbf_path).exists() {
             let reader = PbfReader::new();
             let filter = PbfFilter::new()
                 .nodes_only()
                 .with_tag("amenity", Some("restaurant"));
-                
+
             let stream = reader.stream_file(sample_pbf_path, Some(filter));
-            
+
             match stream {
                 Ok(stream) => {
                     let mut restaurant_count = 0;
-                    
+
                     let result = stream.for_each(|element| {
                         if let StreamElement::Node(node) = element {
                             if let Some(amenity) = node.tags.get("amenity") {
                                 if amenity == "restaurant" {
                                     restaurant_count += 1;
                                     if restaurant_count <= 3 {
-                                        println!("Restaurant found: {} at ({}, {})", 
+                                        println!(
+                                            "Restaurant found: {} at ({}, {})",
                                             node.tags.get("name").unwrap_or(&"unnamed".to_string()),
-                                            node.lat, node.lon);
+                                            node.lat,
+                                            node.lon
+                                        );
                                     }
                                 }
                             }
                         }
                     });
-                    
+
                     match result {
                         Ok(_) => {
                             println!("Found {} restaurants via streaming", restaurant_count);

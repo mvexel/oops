@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use crate::data::{BoundingBox, OsmId};
 use serde::{Deserialize, Serialize};
-use crate::data::{OsmId, BoundingBox};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ElementType {
@@ -54,7 +54,7 @@ impl AnalysisResult {
             confidence: 1.0,
         }
     }
-    
+
     pub fn add_finding(&mut self, finding: Finding) {
         if finding.severity > self.overall_severity {
             self.overall_severity = finding.severity.clone();
@@ -86,7 +86,7 @@ impl AnalysisQuery {
             context: AnalysisContext::default(),
         }
     }
-    
+
     pub fn with_element(mut self, element: ElementRef) -> Self {
         self.elements.push(element);
         self
@@ -110,7 +110,9 @@ impl Default for AnalysisContext {
 
 pub trait Analyzer: Send + Sync {
     fn name(&self) -> &str;
-    fn version(&self) -> &str { "1.0.0" }
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
     fn description(&self) -> &str;
     fn analyze(&self, query: &AnalysisQuery, data: &crate::data::OsmData) -> Vec<AnalysisResult>;
 }
@@ -124,7 +126,10 @@ pub struct AnalyzerRegistry {
 impl std::fmt::Debug for AnalyzerRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AnalyzerRegistry")
-            .field("analyzers", &format!("{} registered analyzers", self.analyzers.len()))
+            .field(
+                "analyzers",
+                &format!("{} registered analyzers", self.analyzers.len()),
+            )
             .finish()
     }
 }
@@ -135,43 +140,56 @@ impl AnalyzerRegistry {
             analyzers: HashMap::new(),
         }
     }
-    
+
     /// Register an analyzer by name
     pub fn register<A: Analyzer + 'static>(&mut self, analyzer: A) {
         let name = analyzer.name().to_string();
         self.analyzers.insert(name, Box::new(analyzer));
     }
-    
+
     /// Get analyzer by name
     pub fn get(&self, name: &str) -> Option<&dyn Analyzer> {
         self.analyzers.get(name).map(|a| a.as_ref())
     }
-    
+
     /// List all registered analyzers
     pub fn list(&self) -> Vec<&str> {
         self.analyzers.keys().map(|s| s.as_str()).collect()
     }
-    
+
     /// Run analysis with a specific analyzer
-    pub fn analyze(&self, analyzer_name: &str, query: &AnalysisQuery, data: &crate::data::OsmData) -> Result<Vec<AnalysisResult>, String> {
+    pub fn analyze(
+        &self,
+        analyzer_name: &str,
+        query: &AnalysisQuery,
+        data: &crate::data::OsmData,
+    ) -> Result<Vec<AnalysisResult>, String> {
         match self.get(analyzer_name) {
             Some(analyzer) => Ok(analyzer.analyze(query, data)),
-            None => Err(format!("Analyzer '{}' not found. Available: {}", analyzer_name, self.list().join(", ")))
+            None => Err(format!(
+                "Analyzer '{}' not found. Available: {}",
+                analyzer_name,
+                self.list().join(", ")
+            )),
         }
     }
-    
+
     /// Run analysis with all registered analyzers
-    pub fn analyze_all(&self, query: &AnalysisQuery, data: &crate::data::OsmData) -> HashMap<String, Vec<AnalysisResult>> {
+    pub fn analyze_all(
+        &self,
+        query: &AnalysisQuery,
+        data: &crate::data::OsmData,
+    ) -> HashMap<String, Vec<AnalysisResult>> {
         let mut results = HashMap::new();
-        
+
         for (name, analyzer) in &self.analyzers {
             let analysis_results = analyzer.analyze(query, data);
             results.insert(name.clone(), analysis_results);
         }
-        
+
         results
     }
-    
+
     /// Get analyzer metadata
     pub fn get_info(&self, name: &str) -> Option<AnalyzerInfo> {
         self.get(name).map(|analyzer| AnalyzerInfo {
@@ -180,10 +198,11 @@ impl AnalyzerRegistry {
             description: analyzer.description().to_string(),
         })
     }
-    
+
     /// Get all analyzer metadata
     pub fn get_all_info(&self) -> Vec<AnalyzerInfo> {
-        self.analyzers.values()
+        self.analyzers
+            .values()
             .map(|analyzer| AnalyzerInfo {
                 name: analyzer.name().to_string(),
                 version: analyzer.version().to_string(),
@@ -213,11 +232,11 @@ impl AnalyzerConfig {
             parameters: HashMap::new(),
         }
     }
-    
+
     pub fn set(&mut self, key: &str, value: &str) {
         self.parameters.insert(key.to_string(), value.to_string());
     }
-    
+
     pub fn get(&self, key: &str) -> Option<&String> {
         self.parameters.get(key)
     }

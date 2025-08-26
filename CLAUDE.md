@@ -1,1 +1,2 @@
 - adhere to test driven development practices
+- Make use of well maintained geospatial crates https://github.com/georust

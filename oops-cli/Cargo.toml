@@ -10,3 +10,5 @@ oops-analyzers = { path = "../oops-analyzers" }
 clap = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
+serde_json = "1.0"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

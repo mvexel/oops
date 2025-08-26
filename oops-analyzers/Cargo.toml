@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 oops-core = { path = "../oops-core" }
-oops-spatial = { path = "../oops-spatial" }
+oops-ingest = { path = "../oops-ingest" }
+geo = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
