@@ -3,9 +3,7 @@
 //! Tests for analyzing intersections where connected roads lack name tags
 
 use oops_core::*;
-use geo::*;
-use geo::algorithm::haversine_distance::HaversineDistance;
-use std::collections::HashMap;
+
 
 #[cfg(test)]
 mod tests {
@@ -206,24 +204,15 @@ mod tests {
 
 // Analyzer implementation will go here after tests are written
 pub struct MissingStreetNamesAnalyzer {
-    search_radius_meters: f64,
 }
 
 impl MissingStreetNamesAnalyzer {
     pub fn new() -> Self {
-        Self {
-            search_radius_meters: 200.0, // Default search radius
-        }
+        Self {}
     }
 
-    pub fn with_config(config: AnalyzerConfig) -> Self {
-        let search_radius = config.get("search_radius_meters")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(200.0);
-
-        Self {
-            search_radius_meters: search_radius,
-        }
+    pub fn with_config(_config: AnalyzerConfig) -> Self {
+        Self {}
     }
 }
 

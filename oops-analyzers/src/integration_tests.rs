@@ -2,11 +2,6 @@
 //!
 //! Tests analyzers with the Salt Lake City sample data
 
-use oops_core::*;
-use oops_ingest::*;
-use crate::*;
-use geo::*;
-use std::path::Path;
 
 #[cfg(test)]
 mod tests {
