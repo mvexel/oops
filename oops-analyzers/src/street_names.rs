@@ -4,11 +4,9 @@
 
 use oops_core::*;
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     fn create_test_intersection_data() -> OsmData {
         let mut data = OsmData::new();
@@ -16,25 +14,30 @@ mod tests {
         // Create a proper 3-way intersection (T-junction)
         data.add_node(OsmNode::new(1, 0.0, 0.0)); // intersection center
         data.add_node(OsmNode::new(2, 0.001, 0.0)); // east
-        data.add_node(OsmNode::new(3, -0.001, 0.0)); // west  
+        data.add_node(OsmNode::new(3, -0.001, 0.0)); // west
         data.add_node(OsmNode::new(4, 0.0, 0.001)); // north
         data.add_node(OsmNode::new(5, 0.0, -0.001)); // south
 
         // Way 1: East segment WITH name
         let mut way1 = OsmWay::new(1, vec![1, 2]);
-        way1.tags.insert("highway".to_string(), "residential".to_string());
-        way1.tags.insert("name".to_string(), "Main Street".to_string());
+        way1.tags
+            .insert("highway".to_string(), "residential".to_string());
+        way1.tags
+            .insert("name".to_string(), "Main Street".to_string());
         data.ways.insert(1, way1);
 
-        // Way 2: West segment WITH name  
+        // Way 2: West segment WITH name
         let mut way2 = OsmWay::new(2, vec![3, 1]);
-        way2.tags.insert("highway".to_string(), "residential".to_string());
-        way2.tags.insert("name".to_string(), "Main Street".to_string());
+        way2.tags
+            .insert("highway".to_string(), "residential".to_string());
+        way2.tags
+            .insert("name".to_string(), "Main Street".to_string());
         data.ways.insert(2, way2);
 
         // Way 3: North road WITHOUT name (should be flagged)
         let mut way3 = OsmWay::new(3, vec![1, 4]);
-        way3.tags.insert("highway".to_string(), "residential".to_string());
+        way3.tags
+            .insert("highway".to_string(), "residential".to_string());
         // No name tag - this should trigger finding
         data.ways.insert(3, way3);
 
@@ -52,20 +55,26 @@ mod tests {
 
         // Way 1: East segment WITH name
         let mut way1 = OsmWay::new(10, vec![10, 11]);
-        way1.tags.insert("highway".to_string(), "residential".to_string());
-        way1.tags.insert("name".to_string(), "Oak Street".to_string());
+        way1.tags
+            .insert("highway".to_string(), "residential".to_string());
+        way1.tags
+            .insert("name".to_string(), "Oak Street".to_string());
         data.ways.insert(10, way1);
 
-        // Way 2: West segment WITH name  
+        // Way 2: West segment WITH name
         let mut way2 = OsmWay::new(11, vec![12, 10]);
-        way2.tags.insert("highway".to_string(), "residential".to_string());
-        way2.tags.insert("name".to_string(), "Oak Street".to_string());
+        way2.tags
+            .insert("highway".to_string(), "residential".to_string());
+        way2.tags
+            .insert("name".to_string(), "Oak Street".to_string());
         data.ways.insert(11, way2);
 
         // Way 3: North segment WITH name
         let mut way3 = OsmWay::new(12, vec![10, 13]);
-        way3.tags.insert("highway".to_string(), "residential".to_string());
-        way3.tags.insert("name".to_string(), "Pine Avenue".to_string());
+        way3.tags
+            .insert("highway".to_string(), "residential".to_string());
+        way3.tags
+            .insert("name".to_string(), "Pine Avenue".to_string());
         data.ways.insert(12, way3);
 
         data
@@ -81,7 +90,8 @@ mod tests {
 
         // Single way connecting three nodes (no intersection)
         let mut way = OsmWay::new(20, vec![20, 21, 22]);
-        way.tags.insert("highway".to_string(), "residential".to_string());
+        way.tags
+            .insert("highway".to_string(), "residential".to_string());
         // No name - but not an intersection so shouldn't be flagged
         data.ways.insert(20, way);
 
@@ -108,12 +118,20 @@ mod tests {
         let results = analyzer.analyze(&query, &data);
 
         // Should find one result for the intersection
-        assert_eq!(results.len(), 1, "Should find one intersection with missing names");
+        assert_eq!(
+            results.len(),
+            1,
+            "Should find one intersection with missing names"
+        );
 
         let result = &results[0];
         assert_eq!(result.element_id, 1); // intersection node
         assert_eq!(result.element_type, ElementType::Node);
-        assert_eq!(result.findings.len(), 1, "Should have one finding for unnamed road");
+        assert_eq!(
+            result.findings.len(),
+            1,
+            "Should have one finding for unnamed road"
+        );
 
         let finding = &result.findings[0];
         assert_eq!(finding.category, ProblemCategory::Missing);
@@ -135,7 +153,11 @@ mod tests {
         // Should find the intersection but no problems
         assert_eq!(results.len(), 1, "Should find one intersection");
         let result = &results[0];
-        assert_eq!(result.findings.len(), 0, "Should have no findings - all roads named");
+        assert_eq!(
+            result.findings.len(),
+            0,
+            "Should have no findings - all roads named"
+        );
     }
 
     #[test]
@@ -166,8 +188,16 @@ mod tests {
         let distance2 = intersection_point.haversine_distance(&way2_start);
 
         // Verify distances are reasonable (0.001 degrees ≈ 111m at equator)
-        assert!(distance1 > 100.0 && distance1 < 120.0, "Distance should be ~111m, got {}", distance1);
-        assert!(distance2 > 100.0 && distance2 < 120.0, "Distance should be ~111m, got {}", distance2);
+        assert!(
+            distance1 > 100.0 && distance1 < 120.0,
+            "Distance should be ~111m, got {}",
+            distance1
+        );
+        assert!(
+            distance2 > 100.0 && distance2 < 120.0,
+            "Distance should be ~111m, got {}",
+            distance2
+        );
 
         // Both should be within 200m search radius
         assert!(distance1 < 200.0);
@@ -198,13 +228,15 @@ mod tests {
         // Should include context about which way lacks name
         assert!(finding.context.contains_key("unnamed_way_id"));
         assert!(finding.context.contains_key("highway_type"));
-        assert_eq!(finding.context.get("highway_type"), Some(&"residential".to_string()));
+        assert_eq!(
+            finding.context.get("highway_type"),
+            Some(&"residential".to_string())
+        );
     }
 }
 
 // Analyzer implementation will go here after tests are written
-pub struct MissingStreetNamesAnalyzer {
-}
+pub struct MissingStreetNamesAnalyzer {}
 
 impl MissingStreetNamesAnalyzer {
     pub fn new() -> Self {
@@ -240,16 +272,28 @@ impl Analyzer for MissingStreetNamesAnalyzer {
                 let intersection_point = intersection_node.to_point();
 
                 // Skip if intersection is outside query area
-                if !query.area.contains_point(intersection_point.x(), intersection_point.y()) {
+                if !query
+                    .area
+                    .contains_point(intersection_point.x(), intersection_point.y())
+                {
                     continue;
                 }
 
                 let mut result = AnalysisResult::new(intersection_id, ElementType::Node);
-                
+
                 // Find all ways connected to this intersection
-                let connected_ways: Vec<_> = data.ways
+                let connected_ways: Vec<_> = data
+                    .ways
                     .values()
-                    .filter(|way| is_road_way(way) && way.nodes.contains(&intersection_id))
+                    .filter(|way| {
+                        is_road_way(way)
+                            && way.tags.get("junction") != Some(&"roundabout".to_string())
+                            && !way
+                                .tags
+                                .get("highway")
+                                .map_or(false, |v| v.ends_with("_link"))
+                            && way.nodes.contains(&intersection_id)
+                    })
                     .collect();
 
                 // Check each connected way for missing name
@@ -257,7 +301,7 @@ impl Analyzer for MissingStreetNamesAnalyzer {
                     if !way.tags.contains_key("name") {
                         let mut context = std::collections::HashMap::new();
                         context.insert("unnamed_way_id".to_string(), way.id.to_string());
-                        
+
                         if let Some(highway_type) = way.tags.get("highway") {
                             context.insert("highway_type".to_string(), highway_type.clone());
                         }
