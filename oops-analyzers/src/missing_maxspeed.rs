@@ -19,9 +19,10 @@
 //! The analyzer considers these highway types as "main roads":
 //! - `primary` - Major roads, often with national significance
 //! - `secondary` - Important roads with regional significance  
-//! - `tertiary` - Roads connecting smaller settlements
+//! - `tertiary` - Roads connecting smaller settlements or neighborhoods
 //! - `trunk` - Important non-motorway roads
 //! - `motorway` - Controlled-access highways
+//! For a discussion of road types in OSM, please consult the OpenStreetMap Wiki.
 //!
 //! The following highway types are **excluded** as they typically don't require explicit maxspeed:
 //! - `residential` - Local residential streets (often have implicit speed limits)

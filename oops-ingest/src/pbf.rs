@@ -4,7 +4,6 @@ use osmpbf::{Element, ElementReader};
 use std::collections::HashMap;
 use std::path::Path;
 
-
 pub trait ProgressReporter {
     fn report_progress(&self, processed: usize, message: &str);
 }
@@ -54,6 +53,9 @@ impl PbfReader {
         let mut count = 0;
         let mut total_processed = 0;
 
+        /*
+        TODO #1 implement parallel processing
+        */
         reader.for_each(|element| {
             total_processed += 1;
 
@@ -305,8 +307,6 @@ impl PbfFilter {
             .insert(key.to_string(), value.map(|v| v.to_string()));
         self
     }
-
-    
 }
 
 pub struct PbfElementStream {
