@@ -119,7 +119,7 @@ mod tests {
 
         if Path::new(sample_pbf_path).exists() {
             let reader = PbfReader::new();
-            let filter = PbfFilter::new().limit(1000); // Limit for testing
+            let filter = PbfFilter::new(); // Remove limit call
 
             let result = reader.read_file(sample_pbf_path, Some(filter)).await;
 

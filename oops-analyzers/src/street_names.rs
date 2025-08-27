@@ -7,6 +7,8 @@ use oops_core::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geo::HaversineDistance;
+    use geo::Point;
 
     fn create_test_intersection_data() -> OsmData {
         let mut data = OsmData::new();
