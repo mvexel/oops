@@ -1,0 +1,40 @@
+{
+    "features": [
+        {
+            "geometry": {
+                "coordinates": [
+                    [
+                        -111.8336489,
+                        40.3882722
+                    ],
+                    [
+                        -111.8337563,
+                        40.3882222
+                    ]
+                ],
+                "type": "LineString"
+            },
+            "properties": {
+                "destination": "I-15 Southbound",
+                "highway": "motorway_link",
+                "mr_challengeId": "2857",
+                "mr_mappedOn": "2025-06-03T22:01:50+00:00",
+                "mr_mapper": null,
+                "mr_responses": null,
+                "mr_reviewedAt": null,
+                "mr_reviewer": null,
+                "mr_reviewStatus": null,
+                "mr_reviewTimeSeconds": null,
+                "mr_tags": null,
+                "mr_taskId": "260254046",
+                "mr_taskName": "814302056",
+                "mr_taskPriority": "High",
+                "mr_taskStatus": "Fixed",
+                "oneway": "yes",
+                "osmid": "814302056"
+            },
+            "type": "Feature"
+        }
+    ],
+    "type": "FeatureCollection"
+}

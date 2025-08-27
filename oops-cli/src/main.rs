@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use oops_core::{AnalysisQuery, AnalysisResult, AnalyzerRegistry, BoundingBox};
 use oops_ingest::{PbfReader, PbfFilter};
-use oops_analyzers::MissingStreetNamesAnalyzer;
+use oops_analyzers::{MissingStreetNamesAnalyzer, MissingMaxspeedAnalyzer};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -105,6 +105,7 @@ async fn analyze_command(
     // Set up analyzer registry
     let mut registry = AnalyzerRegistry::new();
     registry.register(MissingStreetNamesAnalyzer::new());
+    registry.register(MissingMaxspeedAnalyzer::new());
     
     // Run analysis
     let bbox = query_bbox.unwrap_or_else(|| BoundingBox::new(-180.0, -90.0, 180.0, 90.0));
@@ -115,7 +116,7 @@ async fn analyze_command(
         vec![registry.analyze(&analyzer_name, &query, &data)?]
     } else {
         // Run all analyzers
-        vec![registry.analyze("missing_street_names", &query, &data)?]
+        registry.analyze_all(&query, &data).into_values().collect()
     };
     
     // Output results
@@ -127,9 +128,10 @@ async fn analyze_command(
 fn list_analyzers() {
     let mut registry = AnalyzerRegistry::new();
     registry.register(MissingStreetNamesAnalyzer::new());
+    registry.register(MissingMaxspeedAnalyzer::new());
     
     println!("Available analyzers:");
-    if let Some(info) = registry.get_info("missing_street_names") {
+    for info in registry.get_all_info() {
         println!("  {} (v{}) - {}", info.name, info.version, info.description);
     }
 }
