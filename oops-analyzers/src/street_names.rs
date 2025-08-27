@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_spatial_distance_calculation() {
         // Test that we can find ways within distance of intersection
-        let data = create_test_intersection_data();
+        // let data = create_test_intersection_data();
         let intersection_point = Point::new(0.0, 0.0);
 
         // Test nearby way detection
