@@ -4,9 +4,9 @@
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
     use crate::MissingStreetNamesAnalyzer;
-    use geo::Point;
+    
     use oops_core::Analyzer;
     use oops_core::{AnalysisQuery, AnalyzerRegistry, BoundingBox, OsmData, OsmNode, OsmWay};
     use oops_ingest::{PbfFilter, PbfReader};
