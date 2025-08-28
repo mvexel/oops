@@ -29,7 +29,7 @@ mod tests {
     #[test]
     fn test_osm_node_to_point() {
         let mut tags = HashMap::new();
-        tags.insert("highway".to_string(), "crossing".to_string());
+        tags.insert("highway".into(), "crossing".into());
 
         let node = OsmNode {
             id: 456,
@@ -125,13 +125,13 @@ mod tests {
     #[test]
     fn test_finding_creation() {
         let mut context = HashMap::new();
-        context.insert("tag".to_string(), "amenity=restaurant".to_string());
+        context.insert("tag".into(), "amenity=restaurant".into());
 
         let finding = Finding {
             category: ProblemCategory::Missing,
             severity: Severity::Medium,
-            message: "Opening hours not specified".to_string(),
-            recommendation: Some("Add opening_hours tag".to_string()),
+            message: Some("Opening hours not specified".into()),
+            recommendation: Some("Add opening_hours tag".into()),
             context,
         };
 
@@ -140,7 +140,7 @@ mod tests {
         assert!(finding.recommendation.is_some());
         assert_eq!(
             finding.context.get("tag"),
-            Some(&"amenity=restaurant".to_string())
+            Some(&"amenity=restaurant".into())
         );
     }
 
@@ -151,7 +151,7 @@ mod tests {
         let finding = Finding {
             category: ProblemCategory::Invalid,
             severity: Severity::High,
-            message: "Invalid highway type".to_string(),
+            message: Some("Invalid highway type".into()),
             recommendation: None,
             context: HashMap::new(),
         };
@@ -205,8 +205,8 @@ mod tests {
                             let finding = Finding {
                                 category: ProblemCategory::Missing,
                                 severity: Severity::Medium,
-                                message: "Missing opening hours".to_string(),
-                                recommendation: Some("Add opening_hours tag".to_string()),
+                                message: Some("Missing opening hours".into()),
+                                recommendation: Some("Add opening_hours tag".into()),
                                 context: HashMap::new(),
                             };
                             result.add_finding(finding);
@@ -225,7 +225,7 @@ mod tests {
 
         // Add POI node with amenity
         let mut poi_tags = HashMap::new();
-        poi_tags.insert("amenity".to_string(), "restaurant".to_string());
+        poi_tags.insert("amenity".into(), "restaurant".into());
         let poi_node = OsmNode {
             id: 123,
             lon: 13.4050,
@@ -284,8 +284,8 @@ mod tests {
                             let sidewalk_count = nearby_nodes
                                 .iter()
                                 .filter(|n| {
-                                    n.tags.get("highway") == Some(&"footway".to_string())
-                                        || n.tags.get("footway") == Some(&"sidewalk".to_string())
+                                    n.tags.get("highway") == Some(&"footway".into())
+                                        || n.tags.get("footway") == Some(&"sidewalk".into())
                                 })
                                 .count();
 
@@ -293,9 +293,9 @@ mod tests {
                                 let finding = Finding {
                                     category: ProblemCategory::Missing,
                                     severity: Severity::Critical,
-                                    message: "No sidewalks found near intersection".to_string(),
+                                    message: Some("No sidewalks found near intersection".into()),
                                     recommendation: Some(
-                                        "Add mapped sidewalks or footway=sidewalk tags".to_string(),
+                                        "Add mapped sidewalks or footway=sidewalk tags".into(),
                                     ),
                                     context: HashMap::new(),
                                 };
@@ -319,8 +319,8 @@ mod tests {
 
         // Add a sidewalk node nearby (within buffer)
         let mut sidewalk_tags = HashMap::new();
-        sidewalk_tags.insert("highway".to_string(), "footway".to_string());
-        sidewalk_tags.insert("footway".to_string(), "sidewalk".to_string());
+        sidewalk_tags.insert("highway".into(), "footway".into());
+        sidewalk_tags.insert("footway".into(), "sidewalk".into());
         data.add_node(OsmNode {
             id: 1000,
             lon: 13.4051,
@@ -352,8 +352,8 @@ mod tests {
         config.set("min_quality_level", "2");
 
         assert_eq!(config.name, "crossing_analyzer");
-        assert_eq!(config.get("buffer_distance"), Some(&"25.0".to_string()));
-        assert_eq!(config.get("min_quality_level"), Some(&"2".to_string()));
+        assert_eq!(config.get("buffer_distance"), Some(&"25.0".into()));
+        assert_eq!(config.get("min_quality_level"), Some(&"2".into()));
         assert_eq!(config.get("nonexistent"), None);
     }
 

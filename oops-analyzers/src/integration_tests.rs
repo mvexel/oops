@@ -4,9 +4,9 @@
 
 #[cfg(test)]
 mod tests {
-    
+
     use crate::MissingStreetNamesAnalyzer;
-    
+
     use oops_core::Analyzer;
     use oops_core::{AnalysisQuery, AnalyzerRegistry, BoundingBox, OsmData, OsmNode, OsmWay};
     use oops_ingest::{PbfFilter, PbfReader};
@@ -74,7 +74,7 @@ mod tests {
                 );
 
                 for finding in &result.findings {
-                    println!("  - {}", finding.message);
+                    println!("  - {:?}", finding.message);
                     if let Some(way_id) = finding.context.get("unnamed_way_id") {
                         println!("    Way ID: {}", way_id);
                     }
@@ -212,23 +212,18 @@ mod tests {
 
         // Three roads meeting at intersection (degree 3)
         let mut way1 = OsmWay::new(1, vec![1, 2]);
-        way1.tags
-            .insert("highway".to_string(), "residential".to_string());
-        way1.tags
-            .insert("name".to_string(), "Test Street".to_string());
+        way1.tags.insert("highway".into(), "residential".into());
+        way1.tags.insert("name".into(), "Test Street".into());
         data.ways.insert(1, way1);
 
         let mut way2 = OsmWay::new(2, vec![3, 1]);
-        way2.tags
-            .insert("highway".to_string(), "residential".to_string());
+        way2.tags.insert("highway".into(), "residential".into());
         // No name - should be flagged
         data.ways.insert(2, way2);
 
         let mut way3 = OsmWay::new(3, vec![1, 4]);
-        way3.tags
-            .insert("highway".to_string(), "residential".to_string());
-        way3.tags
-            .insert("name".to_string(), "Another Street".to_string());
+        way3.tags.insert("highway".into(), "residential".into());
+        way3.tags.insert("name".into(), "Another Street".into());
         data.ways.insert(3, way3);
 
         data

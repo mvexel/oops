@@ -52,7 +52,7 @@
 //!     for finding in result.findings {
 //!         println!("  Issue: {}", finding.message);
 //!         if let Some(rec) = finding.recommendation {
-//!             println!("  Recommendation: {}", rec);
+//!             println!(("  Recommendation: {:?}", rec);
 //!         }
 //!     }
 //! }
@@ -237,25 +237,25 @@ impl MissingMaxspeedAnalyzer {
         let mut context = HashMap::new();
 
         // Always include the way ID for reference
-        context.insert("way_id".to_string(), way.id.to_string());
+        context.insert("way_id".into(), way.id.to_string());
 
         // Include the highway type for categorization
         if let Some(highway_type) = way.tags.get("highway") {
-            context.insert("highway_type".to_string(), highway_type.clone());
+            context.insert("highway_type".into(), highway_type.clone());
         }
 
         // Include road name if available (helps with human-readable reporting)
         if let Some(name) = way.tags.get("name") {
-            context.insert("way_name".to_string(), name.clone());
+            context.insert("way_name".into(), name.clone());
         }
 
         // Include road reference number if available (like "US-101", "A1")
         if let Some(road_ref) = way.tags.get("ref") {
-            context.insert("way_ref".to_string(), road_ref.clone());
+            context.insert("way_ref".into(), road_ref.clone());
         }
 
         // Include node count as an indicator of way length/complexity
-        context.insert("node_count".to_string(), way.nodes.len().to_string());
+        context.insert("node_count".into(), way.nodes.len().to_string());
 
         context
     }
@@ -275,7 +275,7 @@ impl MissingMaxspeedAnalyzer {
     /// 2. The way name or ID for identification
     /// 3. Brief explanation of why this matters
     fn create_finding_message(&self, way: &OsmWay) -> String {
-        let default_highway = "road".to_string();
+        let default_highway = "road".into();
         let highway_type = way.tags.get("highway").unwrap_or(&default_highway);
 
         // Use road name if available, otherwise use way ID
@@ -306,24 +306,24 @@ impl MissingMaxspeedAnalyzer {
     /// Could be enhanced to include region-specific advice or typical speed
     /// ranges for different road types.
     fn create_recommendation(&self, way: &OsmWay) -> String {
-        let default_highway = "road".to_string();
+        let default_highway = "road".into();
         let highway_type = way.tags.get("highway").unwrap_or(&default_highway);
 
         match highway_type.as_str() {
             "motorway" => {
-                "Add maxspeed tag with the posted speed limit (typically 55-80+ mph/90-130+ km/h depending on country). Check roadside signs or official speed limit maps.".to_string()
+                "Add maxspeed tag with the posted speed limit (typically 55-80+ mph/90-130+ km/h depending on country). Check roadside signs or official speed limit maps.".into()
             }
             "trunk" => {
-                "Add maxspeed tag with the posted speed limit (typically 45-70 mph/70-110 km/h). Verify with local signage or transportation authority data.".to_string()
+                "Add maxspeed tag with the posted speed limit (typically 45-70 mph/70-110 km/h). Verify with local signage or transportation authority data.".into()
             }
             "primary" | "secondary" => {
-                "Add maxspeed tag with the posted speed limit (typically 25-55 mph/40-90 km/h). Check posted signs along the road.".to_string()
+                "Add maxspeed tag with the posted speed limit (typically 25-55 mph/40-90 km/h). Check posted signs along the road.".into()
             }
             "tertiary" => {
-                "Add maxspeed tag with the posted speed limit (typically 25-45 mph/40-70 km/h). Look for speed limit signs at road entry points.".to_string()
+                "Add maxspeed tag with the posted speed limit (typically 25-45 mph/40-70 km/h). Look for speed limit signs at road entry points.".into()
             }
             _ => {
-                "Add maxspeed tag with the posted speed limit. Check roadside signage or local traffic regulations for the correct value.".to_string()
+                "Add maxspeed tag with the posted speed limit. Check roadside signage or local traffic regulations for the correct value.".into()
             }
         }
     }
@@ -344,7 +344,7 @@ impl MissingMaxspeedAnalyzer {
     ///
     /// Higher severity indicates more impact on navigation and routing systems.
     fn determine_severity(&self, way: &OsmWay) -> Severity {
-        let default_highway = "unknown".to_string();
+        let default_highway = "unknown".into();
         let highway_type = way.tags.get("highway").unwrap_or(&default_highway);
 
         match highway_type.as_str() {
@@ -456,7 +456,7 @@ impl Analyzer for MissingMaxspeedAnalyzer {
             let finding = Finding {
                 category: ProblemCategory::Missing, // This is a missing data issue
                 severity: self.determine_severity(way), // Severity based on road type
-                message: self.create_finding_message(way), // Human-readable description
+                message: Some(self.create_finding_message(way)), // Human-readable description
                 recommendation: Some(self.create_recommendation(way)), // Actionable advice
                 context: self.create_finding_context(way), // Structured metadata
             };
@@ -499,38 +499,32 @@ mod tests {
 
         // Way 1: Primary road WITHOUT maxspeed (should be flagged)
         let mut primary_way = OsmWay::new(1, vec![1, 2]);
-        primary_way
-            .tags
-            .insert("highway".to_string(), "primary".to_string());
-        primary_way
-            .tags
-            .insert("name".to_string(), "Main Street".to_string());
-        primary_way
-            .tags
-            .insert("ref".to_string(), "US-89".to_string());
+        primary_way.tags.insert("highway".into(), "primary".into());
+        primary_way.tags.insert("name".into(), "Main Street".into());
+        primary_way.tags.insert("ref".into(), "US-89".into());
         data.ways.insert(1, primary_way);
 
         // Way 2: Secondary road WITH maxspeed (should NOT be flagged)
         let mut secondary_way = OsmWay::new(2, vec![3, 4]);
         secondary_way
             .tags
-            .insert("highway".to_string(), "secondary".to_string());
+            .insert("highway".into(), "secondary".into());
         secondary_way
             .tags
-            .insert("name".to_string(), "Oak Avenue".to_string());
+            .insert("name".into(), "Oak Avenue".into());
         secondary_way
             .tags
-            .insert("maxspeed".to_string(), "45 mph".to_string());
+            .insert("maxspeed".into(), "45 mph".into());
         data.ways.insert(2, secondary_way);
 
         // Way 3: Residential road WITHOUT maxspeed (should NOT be flagged)
         let mut residential_way = OsmWay::new(3, vec![5, 6]);
         residential_way
             .tags
-            .insert("highway".to_string(), "residential".to_string());
+            .insert("highway".into(), "residential".into());
         residential_way
             .tags
-            .insert("name".to_string(), "Elm Street".to_string());
+            .insert("name".into(), "Elm Street".into());
         data.ways.insert(3, residential_way);
 
         data
@@ -557,8 +551,7 @@ mod tests {
         let main_road_types = ["primary", "secondary", "tertiary", "trunk", "motorway"];
         for highway_type in &main_road_types {
             let mut way = OsmWay::new(1, vec![1, 2]);
-            way.tags
-                .insert("highway".to_string(), highway_type.to_string());
+            way.tags.insert("highway".into(), highway_type.into());
 
             assert!(
                 analyzer.should_analyze_way(&way),
@@ -571,8 +564,7 @@ mod tests {
         let excluded_types = ["residential", "unclassified", "service", "footway"];
         for highway_type in &excluded_types {
             let mut way = OsmWay::new(1, vec![1, 2]);
-            way.tags
-                .insert("highway".to_string(), highway_type.to_string());
+            way.tags.insert("highway".into(), highway_type.into());
 
             assert!(
                 !analyzer.should_analyze_way(&way),
@@ -583,9 +575,7 @@ mod tests {
 
         // Test non-road ways (no highway tag)
         let mut non_road = OsmWay::new(1, vec![1, 2]);
-        non_road
-            .tags
-            .insert("natural".to_string(), "water".to_string());
+        non_road.tags.insert("natural".into(), "water".into());
         assert!(!analyzer.should_analyze_way(&non_road));
     }
 
@@ -598,7 +588,7 @@ mod tests {
         let mut trunk_link = OsmWay::new(1, vec![1, 2]);
         trunk_link
             .tags
-            .insert("highway".to_string(), "trunk_link".to_string());
+            .insert("highway".into(), "trunk_link".into());
         assert!(!default_analyzer.should_analyze_way(&trunk_link));
 
         // Configure to include trunk links
@@ -612,7 +602,7 @@ mod tests {
         let mut motorway_link = OsmWay::new(2, vec![1, 2]);
         motorway_link
             .tags
-            .insert("highway".to_string(), "motorway_link".to_string());
+            .insert("highway".into(), "motorway_link".into());
         assert!(default_analyzer.should_analyze_way(&motorway_link));
     }
 
@@ -625,7 +615,7 @@ mod tests {
         let mut way_with_speed = OsmWay::new(1, vec![1, 2]);
         way_with_speed
             .tags
-            .insert("maxspeed".to_string(), "50 mph".to_string());
+            .insert("maxspeed".into(), "50 mph".into());
         assert!(analyzer.has_maxspeed_tag(&way_with_speed));
 
         // Way without maxspeed tag
@@ -640,29 +630,21 @@ mod tests {
 
         // High severity roads
         let mut motorway = OsmWay::new(1, vec![1, 2]);
-        motorway
-            .tags
-            .insert("highway".to_string(), "motorway".to_string());
+        motorway.tags.insert("highway".into(), "motorway".into());
         assert_eq!(analyzer.determine_severity(&motorway), Severity::High);
 
         let mut trunk = OsmWay::new(2, vec![1, 2]);
-        trunk
-            .tags
-            .insert("highway".to_string(), "trunk".to_string());
+        trunk.tags.insert("highway".into(), "trunk".into());
         assert_eq!(analyzer.determine_severity(&trunk), Severity::High);
 
         // Medium severity roads
         let mut primary = OsmWay::new(3, vec![1, 2]);
-        primary
-            .tags
-            .insert("highway".to_string(), "primary".to_string());
+        primary.tags.insert("highway".into(), "primary".into());
         assert_eq!(analyzer.determine_severity(&primary), Severity::Medium);
 
         // Low severity roads
         let mut tertiary = OsmWay::new(4, vec![1, 2]);
-        tertiary
-            .tags
-            .insert("highway".to_string(), "tertiary".to_string());
+        tertiary.tags.insert("highway".into(), "tertiary".into());
         assert_eq!(analyzer.determine_severity(&tertiary), Severity::Low);
     }
 
@@ -690,8 +672,8 @@ mod tests {
         let finding = &result.findings[0];
         assert_eq!(finding.category, ProblemCategory::Missing);
         assert_eq!(finding.severity, Severity::Medium); // Primary road = medium severity
-        assert!(finding.message.contains("PRIMARY"));
-        assert!(finding.message.contains("Main Street"));
+        assert!(finding.message.as_ref().unwrap().contains("PRIMARY"));
+        assert!(finding.message.as_ref().unwrap().contains("Main Street"));
 
         // Check recommendation is present and helpful
         assert!(finding.recommendation.is_some());
@@ -700,16 +682,10 @@ mod tests {
         assert!(recommendation.contains("posted"));
 
         // Check context includes useful metadata
-        assert_eq!(finding.context.get("way_id"), Some(&"1".to_string()));
-        assert_eq!(
-            finding.context.get("highway_type"),
-            Some(&"primary".to_string())
-        );
-        assert_eq!(
-            finding.context.get("way_name"),
-            Some(&"Main Street".to_string())
-        );
-        assert_eq!(finding.context.get("way_ref"), Some(&"US-89".to_string()));
+        assert_eq!(finding.context.get("way_id"), Some(&"1".into()));
+        assert_eq!(finding.context.get("highway_type"), Some(&"primary".into()));
+        assert_eq!(finding.context.get("way_name"), Some(&"Main Street".into()));
+        assert_eq!(finding.context.get("way_ref"), Some(&"US-89".into()));
     }
 
     /// Test that roads outside the query area are ignored
@@ -734,18 +710,17 @@ mod tests {
         let analyzer = MissingMaxspeedAnalyzer::new();
 
         let mut way = OsmWay::new(123, vec![1, 2, 3, 4]);
-        way.tags
-            .insert("highway".to_string(), "primary".to_string());
-        way.tags.insert("name".to_string(), "Test Road".to_string());
-        way.tags.insert("ref".to_string(), "SR-456".to_string());
+        way.tags.insert("highway".into(), "primary".into());
+        way.tags.insert("name".into(), "Test Road".into());
+        way.tags.insert("ref".into(), "SR-456".into());
 
         let context = analyzer.create_finding_context(&way);
 
-        assert_eq!(context.get("way_id"), Some(&"123".to_string()));
-        assert_eq!(context.get("highway_type"), Some(&"primary".to_string()));
-        assert_eq!(context.get("way_name"), Some(&"Test Road".to_string()));
-        assert_eq!(context.get("way_ref"), Some(&"SR-456".to_string()));
-        assert_eq!(context.get("node_count"), Some(&"4".to_string()));
+        assert_eq!(context.get("way_id"), Some(&"123".into()));
+        assert_eq!(context.get("highway_type"), Some(&"primary".into()));
+        assert_eq!(context.get("way_name"), Some(&"Test Road".into()));
+        assert_eq!(context.get("way_ref"), Some(&"SR-456".into()));
+        assert_eq!(context.get("node_count"), Some(&"4".into()));
     }
 
     /// Test message generation for different road types
@@ -755,12 +730,8 @@ mod tests {
 
         // Test named road
         let mut named_way = OsmWay::new(1, vec![1, 2]);
-        named_way
-            .tags
-            .insert("highway".to_string(), "primary".to_string());
-        named_way
-            .tags
-            .insert("name".to_string(), "Main Street".to_string());
+        named_way.tags.insert("highway".into(), "primary".into());
+        named_way.tags.insert("name".into(), "Main Street".into());
 
         let message = analyzer.create_finding_message(&named_way);
         assert!(message.contains("PRIMARY"));
@@ -771,7 +742,7 @@ mod tests {
         let mut unnamed_way = OsmWay::new(2, vec![1, 2]);
         unnamed_way
             .tags
-            .insert("highway".to_string(), "secondary".to_string());
+            .insert("highway".into(), "secondary".into());
 
         let message = analyzer.create_finding_message(&unnamed_way);
         assert!(message.contains("SECONDARY"));

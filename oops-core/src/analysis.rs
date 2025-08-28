@@ -30,7 +30,7 @@ pub enum ProblemCategory {
 pub struct Finding {
     pub category: ProblemCategory,
     pub severity: Severity,
-    pub message: String,
+    pub message: Option<String>,
     pub recommendation: Option<String>,
     pub context: HashMap<String, String>,
 }
@@ -143,7 +143,7 @@ impl AnalyzerRegistry {
 
     /// Register an analyzer by name
     pub fn register<A: Analyzer + 'static>(&mut self, analyzer: A) {
-        let name = analyzer.name().to_string();
+        let name = analyzer.name().into();
         self.analyzers.insert(name, Box::new(analyzer));
     }
 
@@ -193,9 +193,9 @@ impl AnalyzerRegistry {
     /// Get analyzer metadata
     pub fn get_info(&self, name: &str) -> Option<AnalyzerInfo> {
         self.get(name).map(|analyzer| AnalyzerInfo {
-            name: analyzer.name().to_string(),
-            version: analyzer.version().to_string(),
-            description: analyzer.description().to_string(),
+            name: analyzer.name().into(),
+            version: analyzer.version().into(),
+            description: analyzer.description().into(),
         })
     }
 
@@ -204,9 +204,9 @@ impl AnalyzerRegistry {
         self.analyzers
             .values()
             .map(|analyzer| AnalyzerInfo {
-                name: analyzer.name().to_string(),
-                version: analyzer.version().to_string(),
-                description: analyzer.description().to_string(),
+                name: analyzer.name().into(),
+                version: analyzer.version().into(),
+                description: analyzer.description().into(),
             })
             .collect()
     }
@@ -228,13 +228,13 @@ pub struct AnalyzerConfig {
 impl AnalyzerConfig {
     pub fn new(name: &str) -> Self {
         Self {
-            name: name.to_string(),
+            name: name.into(),
             parameters: HashMap::new(),
         }
     }
 
     pub fn set(&mut self, key: &str, value: &str) {
-        self.parameters.insert(key.to_string(), value.to_string());
+        self.parameters.insert(key.into(), value.into());
     }
 
     pub fn get(&self, key: &str) -> Option<&String> {

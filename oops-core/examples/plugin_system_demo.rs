@@ -45,7 +45,7 @@ impl Analyzer for RestaurantAnalyzer {
                             } else {
                                 Severity::Medium
                             },
-                            message: format!("Missing {} information", tag.replace("_", " ")),
+                            message: Some(format!("Missing {} information", tag.replace("_", " "))),
                             recommendation: Some(format!("Add {}=* tag", tag)),
                             context: HashMap::new(),
                         });
@@ -87,11 +87,11 @@ impl Analyzer for AccessibilityAnalyzer {
                         result.add_finding(Finding {
                             category: ProblemCategory::Missing,
                             severity: Severity::Medium,
-                            message: "Missing wheelchair accessibility information".to_string(),
-                            recommendation: Some("Add wheelchair=yes/no/limited tag".to_string()),
+                            message: Some("Missing wheelchair accessibility information".into()),
+                            recommendation: Some("Add wheelchair=yes/no/limited tag".into()),
                             context: {
                                 let mut ctx = HashMap::new();
-                                ctx.insert("amenity".to_string(), amenity.clone());
+                                ctx.insert("amenity".into(), amenity.clone());
                                 ctx
                             },
                         });
@@ -144,11 +144,13 @@ impl Analyzer for HighwaySafetyAnalyzer {
                                 "primary" | "secondary" => Severity::High,
                                 _ => Severity::Medium,
                             },
-                            message: format!("Missing sidewalk information on {} road", highway),
-                            recommendation: Some("Add sidewalk=both/left/right/no tag".to_string()),
+                            message: Some(
+                                format!("Missing sidewalk information on {} road", highway).into(),
+                            ),
+                            recommendation: Some("Add sidewalk=both/left/right/no tag".into()),
                             context: {
                                 let mut ctx = HashMap::new();
-                                ctx.insert("highway".to_string(), highway.clone());
+                                ctx.insert("highway".into(), highway.clone());
                                 ctx
                             },
                         });
@@ -188,8 +190,8 @@ fn main() {
 
     // Add a restaurant without complete information
     let mut restaurant_tags = HashMap::new();
-    restaurant_tags.insert("amenity".to_string(), "restaurant".to_string());
-    restaurant_tags.insert("name".to_string(), "Test Restaurant".to_string());
+    restaurant_tags.insert("amenity".into(), "restaurant".into());
+    restaurant_tags.insert("name".into(), "Test Restaurant".into());
     // Missing: opening_hours, cuisine
 
     let restaurant = OsmNode {
@@ -219,7 +221,7 @@ fn main() {
                     result.findings.len()
                 );
                 for finding in result.findings {
-                    println!("      - {}", finding.message);
+                    println!("      - {:?}", finding.message);
                 }
             }
         }

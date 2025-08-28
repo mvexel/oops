@@ -71,7 +71,7 @@ impl PbfReader {
                         lon: node.lon(),
                         tags: node
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
 
@@ -94,7 +94,7 @@ impl PbfReader {
                         lon: node.lon(),
                         tags: node
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
 
@@ -116,7 +116,7 @@ impl PbfReader {
                         nodes: way.refs().collect(),
                         tags: way
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
 
@@ -142,7 +142,7 @@ impl PbfReader {
                                 osmpbf::RelMemberType::Relation => MemberType::Relation,
                             },
                             member_id: member.member_id,
-                            role: member.role().unwrap_or("").to_string(),
+                            role: member.role().unwrap_or("").into(),
                         })
                         .collect();
 
@@ -151,7 +151,7 @@ impl PbfReader {
                         members,
                         tags: relation
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
 
@@ -304,7 +304,7 @@ impl PbfFilter {
 
     pub fn with_tag(mut self, key: &str, value: Option<&str>) -> Self {
         self.required_tags
-            .insert(key.to_string(), value.map(|v| v.to_string()));
+            .insert(key.into(), value.map(|v| v.into()));
         self
     }
 }
@@ -328,7 +328,7 @@ impl PbfElementStream {
                         lon: node.lon(),
                         tags: node
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
                     callback(StreamElement::Node(osm_node));
@@ -340,7 +340,7 @@ impl PbfElementStream {
                         lon: node.lon(),
                         tags: node
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
                     callback(StreamElement::Node(osm_node));
@@ -351,7 +351,7 @@ impl PbfElementStream {
                         nodes: way.refs().collect(),
                         tags: way
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
                     callback(StreamElement::Way(osm_way));
@@ -366,7 +366,7 @@ impl PbfElementStream {
                                 osmpbf::RelMemberType::Relation => MemberType::Relation,
                             },
                             member_id: member.member_id,
-                            role: member.role().unwrap_or("").to_string(),
+                            role: member.role().unwrap_or("").into(),
                         })
                         .collect();
 
@@ -375,7 +375,7 @@ impl PbfElementStream {
                         members,
                         tags: relation
                             .tags()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .map(|(k, v)| (k.into(), v.into()))
                             .collect(),
                     };
                     callback(StreamElement::Relation(osm_relation));

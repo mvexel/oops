@@ -26,7 +26,7 @@ impl OverpassClient {
 
         Self {
             client,
-            base_url: "https://overpass-api.de/api/interpreter".to_string(),
+            base_url: "https://overpass-api.de/api/interpreter".into(),
         }
     }
 

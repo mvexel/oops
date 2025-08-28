@@ -97,7 +97,7 @@ mod tests {
         assert_eq!(filter.required_tags.len(), 1);
         assert_eq!(
             filter.required_tags.get("amenity"),
-            Some(&Some("restaurant".to_string()))
+            Some(&Some("restaurant".into()))
         );
     }
 
@@ -184,7 +184,7 @@ mod tests {
                                     if restaurant_count <= 3 {
                                         println!(
                                             "Restaurant found: {} at ({}, {})",
-                                            node.tags.get("name").unwrap_or(&"unnamed".to_string()),
+                                            node.tags.get("name").unwrap_or(&"unnamed".into()),
                                             node.lat,
                                             node.lon
                                         );

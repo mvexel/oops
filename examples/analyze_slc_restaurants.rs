@@ -35,12 +35,12 @@ impl Analyzer for RestaurantQualityAnalyzer {
                     result.add_finding(Finding {
                         category: ProblemCategory::Missing,
                         severity: Severity::Medium,
-                        message: "Missing opening hours information".to_string(),
-                        recommendation: Some("Add opening_hours=* tag with business hours".to_string()),
+                        message: "Missing opening hours information".into(),
+                        recommendation: Some("Add opening_hours=* tag with business hours".into()),
                         context: {
                             let mut ctx = HashMap::new();
-                            ctx.insert("name".to_string(), 
-                                node.tags.get("name").unwrap_or(&"unnamed".to_string()).clone());
+                            ctx.insert("name".into(), 
+                                node.tags.get("name").unwrap_or(&"unnamed".into()).clone());
                             ctx
                         },
                     });
@@ -50,8 +50,8 @@ impl Analyzer for RestaurantQualityAnalyzer {
                     result.add_finding(Finding {
                         category: ProblemCategory::Missing,
                         severity: Severity::Low,
-                        message: "Missing cuisine information".to_string(),
-                        recommendation: Some("Add cuisine=* tag (e.g., cuisine=pizza)".to_string()),
+                        message: "Missing cuisine information".into(),
+                        recommendation: Some("Add cuisine=* tag (e.g., cuisine=pizza)".into()),
                         context: HashMap::new(),
                     });
                 }
@@ -60,8 +60,8 @@ impl Analyzer for RestaurantQualityAnalyzer {
                     result.add_finding(Finding {
                         category: ProblemCategory::Missing,
                         severity: Severity::Low,
-                        message: "Missing contact information".to_string(),
-                        recommendation: Some("Add phone=* or contact:phone=* tag".to_string()),
+                        message: "Missing contact information".into(),
+                        recommendation: Some("Add phone=* or contact:phone=* tag".into()),
                         context: HashMap::new(),
                     });
                 }
@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔍 Detailed Findings:");
     for (i, result) in results.iter().take(10).enumerate() {
         let node = osm_data.nodes.get(&result.element_id).unwrap();
-        let name = node.tags.get("name").unwrap_or(&"Unnamed Restaurant".to_string());
+        let name = node.tags.get("name").unwrap_or(&"Unnamed Restaurant".into());
         
         println!("\n{}. {} (ID: {})", i + 1, name, result.element_id);
         println!("   📍 Location: {:.5}, {:.5}", node.lat, node.lon);
