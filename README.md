@@ -95,8 +95,8 @@ impl Analyzer for RestaurantAnalyzer {
                     result.add_finding(Finding {
                         category: ProblemCategory::Missing,
                         severity: Severity::Medium,
-                        message: "Missing opening hours".to_string(),
-                        recommendation: Some("Add opening_hours tag".to_string()),
+                        message: "Missing opening hours".into(),
+                        recommendation: Some("Add opening_hours tag".into()),
                         context: HashMap::new(),
                     });
                 }
@@ -183,8 +183,8 @@ impl Analyzer for MyAnalyzer {
                     result.add_finding(Finding {
                         category: ProblemCategory::Missing,
                         severity: Severity::Medium,
-                        message: "Missing opening hours".to_string(),
-                        recommendation: Some("Add opening_hours tag".to_string()),
+                        message: "Missing opening hours".into(),
+                        recommendation: Some("Add opening_hours tag".into()),
                         context: HashMap::new(),
                     });
                 }

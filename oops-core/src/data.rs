@@ -193,4 +193,15 @@ impl OsmData {
             .map(|node_idx| &node_idx.node)
             .collect()
     }
+
+    pub fn count_amenities(&self) -> std::collections::HashMap<String, usize> {
+        let mut counts = std::collections::HashMap::new();
+
+        for node in self.nodes.values() {
+            if let Some(amenity) = node.tags.get("amenity") {
+                *counts.entry(amenity.clone()).or_insert(0) += 1;
+            }
+        }
+        counts
+    }
 }
