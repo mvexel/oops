@@ -551,7 +551,7 @@ mod tests {
         let main_road_types = ["primary", "secondary", "tertiary", "trunk", "motorway"];
         for highway_type in &main_road_types {
             let mut way = OsmWay::new(1, vec![1, 2]);
-            way.tags.insert("highway".into(), highway_type.into());
+            way.tags.insert("highway".into(), highway_type.to_string());
 
             assert!(
                 analyzer.should_analyze_way(&way),
@@ -564,7 +564,7 @@ mod tests {
         let excluded_types = ["residential", "unclassified", "service", "footway"];
         for highway_type in &excluded_types {
             let mut way = OsmWay::new(1, vec![1, 2]);
-            way.tags.insert("highway".into(), highway_type.into());
+            way.tags.insert("highway".into(), highway_type.to_string());
 
             assert!(
                 !analyzer.should_analyze_way(&way),
