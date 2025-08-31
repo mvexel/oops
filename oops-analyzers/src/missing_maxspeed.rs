@@ -42,6 +42,7 @@
 //! // Set up analysis area (bounding box around downtown area)
 //! let bbox = BoundingBox::new(-111.9, 40.7, -111.8, 40.8);
 //! let query = AnalysisQuery::new(bbox);
+//! let osm_data = OsmData::new();
 //!
 //! // Run analysis on OSM data
 //! let results = analyzer.analyze(&query, &osm_data);
@@ -50,9 +51,9 @@
 //! for result in results {
 //!     println!("Way {} is missing maxspeed tag", result.element_id);
 //!     for finding in result.findings {
-//!         println!("  Issue: {}", finding.message);
+//!         println!("  Issue: {}", finding.message.as_deref().unwrap_or(""));
 //!         if let Some(rec) = finding.recommendation {
-//!             println!(("  Recommendation: {:?}", rec);
+//!             println!("  Recommendation: {:?}", rec);
 //!         }
 //!     }
 //! }
@@ -65,6 +66,9 @@
 //! - `include_primary_links` (default: false) - Whether to include primary_link roads
 //!
 //! ```rust
+//! use oops_core::*;
+//! use oops_analyzers::MissingMaxspeedAnalyzer;
+//!
 //! let mut config = AnalyzerConfig::new("missing_maxspeed");
 //! config.set("include_trunk_links", "true");
 //! let analyzer = MissingMaxspeedAnalyzer::with_config(config);
@@ -116,6 +120,9 @@ impl MissingMaxspeedAnalyzer {
     ///
     /// # Example
     /// ```rust
+    /// use oops_core::*;
+    /// use oops_analyzers::MissingMaxspeedAnalyzer;
+    ///
     /// let mut config = AnalyzerConfig::new("missing_maxspeed");
     /// config.set("include_trunk_links", "true");
     /// let analyzer = MissingMaxspeedAnalyzer::with_config(config);
