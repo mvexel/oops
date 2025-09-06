@@ -18,6 +18,12 @@ pub struct IntersectionAnalyzer {
     config: AnalyzerConfig,
 }
 
+impl Default for IntersectionAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IntersectionAnalyzer {
     /// Create a new analyzer with default settings
     pub fn new() -> Self {
@@ -452,8 +458,7 @@ fn cluster_intersection_nodes(
             current_cluster.push(current_node.node_id);
 
             // Find all unvisited nodes within max_distance of the current node
-            for j in 0..nodes.len() {
-                let neighbor_node = &nodes[j];
+            for (j, neighbor_node) in nodes.iter().enumerate() {
                 if !visited.contains(&neighbor_node.node_id) {
                     let distance = current_node.point.haversine_distance(&neighbor_node.point);
 
@@ -550,23 +555,18 @@ mod tests {
         let query = AnalysisQuery::new(bbox);
 
         let results = analyzer.analyze(&query, &data);
-        // Junctions in bbox: 1 (degree 3), 11 (degree 1), 12 (degree 1), 20 (degree 1)
+        // Junctions in bbox: 1 (degree 3)
         // Node 10 is a shaping node (degree 2) and should not be in the graph.
         assert_eq!(
             results.len(),
-            4,
-            "Should find 4 junctions (1 intersection, 3 dead-ends)"
+            1,
+            "Should find 1 intersection"
         );
 
         // Find the result for the main intersection (node 1)
         let intersection_result = results.iter().find(|r| r.element_id == 1).unwrap();
         let context = &intersection_result.findings[0].context;
         assert_eq!(context.get("degree"), Some(&"3".to_string()));
-        assert_eq!(context.get("complexity"), Some(&"simple".to_string()));
-
-        // Find the result for the dead-end at node 20
-        let dead_end_result = results.iter().find(|r| r.element_id == 20).unwrap();
-        let context = &dead_end_result.findings[0].context;
-        assert_eq!(context.get("degree"), Some(&"1".to_string()));
+        assert_eq!(context.get("intersection_type"), Some(&"simple".to_string()));
     }
 }

@@ -257,15 +257,15 @@ impl Analyzer for PedestrianCompletenessAnalyzer {
                 
                 let (message, recommendation) = if nearby_sidewalks.is_empty() {
                     (
-                        format!("Road has no sidewalk tags and no nearby parallel sidewalks were found."),
-                        format!("Add a sidewalk=* tag (none/left/right/both/separate) or map adjacent sidewalk ways as highway=footway + footway=sidewalk.")
+                        "Road has no sidewalk tags and no nearby parallel sidewalks were found.".to_string(),
+                        "Add a sidewalk=* tag (none/left/right/both/separate) or map adjacent sidewalk ways as highway=footway + footway=sidewalk.".to_string()
                     )
                 } else {
                     (
                         format!("Road has insufficient sidewalk coverage ({:.1}% covered, {:.1}% required).", 
                             coverage_ratio * 100.0, 
                             min_coverage_ratio * 100.0),
-                        format!("Extend existing sidewalk mapping to cover more of this road, or add sidewalk=* tags to indicate actual sidewalk presence.")
+                        "Extend existing sidewalk mapping to cover more of this road, or add sidewalk=* tags to indicate actual sidewalk presence.".to_string()
                     )
                 };
                 
@@ -278,19 +278,17 @@ impl Analyzer for PedestrianCompletenessAnalyzer {
                 };
                 result.add_finding(finding);
                 results.push(result);
-            } else {
-                if debug_mode {
-                    let sidewalk_ids: Vec<String> = nearby_sidewalks.iter()
-                        .map(|sw| sw.way.id.to_string())
-                        .collect();
-                    eprintln!("OK   {}: {} '{}' - adequate sidewalk coverage: {:.1}% >= {:.1}% required (max_distance: {}m, sidewalks: [{}])", 
-                        way.id, highway_type, way_name,
-                        coverage_ratio * 100.0,
-                        min_coverage_ratio * 100.0,
-                        max_distance,
-                        sidewalk_ids.join(", ")
-                    );
-                }
+            } else if debug_mode {
+                let sidewalk_ids: Vec<String> = nearby_sidewalks.iter()
+                    .map(|sw| sw.way.id.to_string())
+                    .collect();
+                eprintln!("OK   {}: {} '{}' - adequate sidewalk coverage: {:.1}% >= {:.1}% required (max_distance: {}m, sidewalks: [{}])", 
+                    way.id, highway_type, way_name,
+                    coverage_ratio * 100.0,
+                    min_coverage_ratio * 100.0,
+                    max_distance,
+                    sidewalk_ids.join(", ")
+                );
             }
         }
 

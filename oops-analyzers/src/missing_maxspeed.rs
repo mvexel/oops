@@ -22,6 +22,7 @@
 //! - `tertiary` - Roads connecting smaller settlements or neighborhoods
 //! - `trunk` - Important non-motorway roads
 //! - `motorway` - Controlled-access highways
+//!
 //! For a discussion of road types in OSM, please consult the OpenStreetMap Wiki.
 //!
 //! The following highway types are **excluded** as they typically don't require explicit maxspeed:
@@ -93,6 +94,12 @@ use std::collections::HashMap;
 pub struct MissingMaxspeedAnalyzer {
     /// Configuration for the analyzer behavior
     config: AnalyzerConfig,
+}
+
+impl Default for MissingMaxspeedAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MissingMaxspeedAnalyzer {
@@ -183,12 +190,12 @@ impl MissingMaxspeedAnalyzer {
             let include_trunk_links = self
                 .config
                 .get("include_trunk_links")
-                .map_or(false, |v| v == "true");
+                .is_some_and(|v| v == "true");
 
             let include_primary_links = self
                 .config
                 .get("include_primary_links")
-                .map_or(false, |v| v == "true");
+                .is_some_and(|v| v == "true");
 
             return match highway_type.as_str() {
                 "trunk_link" => include_trunk_links,

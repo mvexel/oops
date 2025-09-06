@@ -134,11 +134,7 @@ async fn analyze_command(
     let data = if let Some(pbf_path) = file {
         eprintln!("Reading PBF file: {:?}", pbf_path);
         let reader = PbfReader::new();
-        let filter = if let Some(bbox) = &query_bbox {
-            Some(PbfFilter::new().in_bbox(bbox))
-        } else {
-            None
-        };
+        let filter = query_bbox.as_ref().map(|bbox| PbfFilter::new().in_bbox(bbox));
         reader.read_file(&pbf_path, filter).await?
     } else if let (Some(bbox), Some(overpass_query)) = (&query_bbox, &query) {
         eprintln!("Fetching data from Overpass API...");
@@ -361,11 +357,7 @@ fn create_geometry_from_element(
 ) -> Option<Geometry> {
     match element_type {
         ElementType::Node => {
-            if let Some(node) = osm_data.get_node(element_id) {
-                Some(Geometry::new(GeoValue::Point(vec![node.lon, node.lat])))
-            } else {
-                None
-            }
+            osm_data.get_node(element_id).map(|node| Geometry::new(GeoValue::Point(vec![node.lon, node.lat])))
         }
         ElementType::Way => {
             if let Some(way) = osm_data.ways.get(&element_id) {

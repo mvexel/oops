@@ -145,7 +145,7 @@ impl Analyzer for HighwaySafetyAnalyzer {
                                 _ => Severity::Medium,
                             },
                             message: Some(
-                                format!("Missing sidewalk information on {} road", highway).into(),
+                                format!("Missing sidewalk information on {} road", highway),
                             ),
                             recommendation: Some("Add sidewalk=both/left/right/no tag".into()),
                             context: {

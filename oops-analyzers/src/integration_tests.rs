@@ -198,7 +198,7 @@ mod tests {
         assert!(result.is_ok());
 
         let results = result.unwrap();
-        assert!(results.len() > 0, "Should find test intersection");
+        assert!(!results.is_empty(), "Should find test intersection");
     }
 
     fn create_simple_test_data() -> OsmData {

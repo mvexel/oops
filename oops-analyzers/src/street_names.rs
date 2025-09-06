@@ -4,6 +4,109 @@
 
 use oops_core::*;
 
+// Analyzer implementation will go here after tests are written
+pub struct MissingStreetNamesAnalyzer {}
+
+impl Default for MissingStreetNamesAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MissingStreetNamesAnalyzer {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn with_config(_config: AnalyzerConfig) -> Self {
+        Self {}
+    }
+}
+
+impl Analyzer for MissingStreetNamesAnalyzer {
+    fn name(&self) -> &str {
+        "missing_street_names"
+    }
+
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+
+    fn description(&self) -> &str {
+        "Finds intersections where connected roads lack name tags, which can confuse navigation"
+    }
+
+    fn analyze(&self, query: &AnalysisQuery, data: &OsmData) -> Vec<AnalysisResult> {
+        let mut results = Vec::new();
+
+        // Find all intersections in the data
+        let intersection_nodes = find_road_intersections(data);
+
+        for &intersection_id in &intersection_nodes {
+            if let Some(intersection_node) = data.get_node(intersection_id) {
+                let intersection_point = intersection_node.to_point();
+
+                // Skip if intersection is outside query area
+                if !query
+                    .area
+                    .contains_point(intersection_point.x(), intersection_point.y())
+                {
+                    continue;
+                }
+
+                let mut result = AnalysisResult::new(intersection_id, ElementType::Node);
+
+                // Find all ways connected to this intersection
+                let connected_ways: Vec<_> = data
+                    .ways
+                    .values()
+                    .filter(|way| {
+                        is_road_way(way)
+                            && way.tags.get("junction") != Some(&"roundabout".into())
+                            && !way
+                                .tags
+                                .get("highway")
+                                .is_some_and(|v| v.ends_with("_link"))
+                            && way.nodes.contains(&intersection_id)
+                    })
+                    .collect();
+
+                // Check each connected way for missing name
+                for way in &connected_ways {
+                    if !way.tags.contains_key("name") {
+                        let mut context = std::collections::HashMap::new();
+                        context.insert("unnamed_way_id".into(), way.id.to_string());
+
+                        if let Some(highway_type) = way.tags.get("highway") {
+                            context.insert("highway_type".into(), highway_type.clone());
+                        }
+
+                        let finding = Finding {
+                            category: ProblemCategory::Missing,
+                            severity: Severity::Medium,
+                            message: Some(format!(
+                                "Intersection has unnamed road (way {}). This can confuse navigation systems.",
+                                way.id
+                            )),
+                            recommendation: Some("Add name tag to the road".into()),
+                            context,
+                        };
+
+                        result.add_finding(finding);
+                        break; // Only report once per intersection
+                    }
+                }
+
+                // Only add result if we found issues OR if all roads are properly named
+                // (for testing purposes, we want to know about good intersections too)
+                results.push(result);
+            }
+        }
+
+        results
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,102 +325,5 @@ mod tests {
             finding.context.get("highway_type"),
             Some(&"residential".into())
         );
-    }
-}
-
-// Analyzer implementation will go here after tests are written
-pub struct MissingStreetNamesAnalyzer {}
-
-impl MissingStreetNamesAnalyzer {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn with_config(_config: AnalyzerConfig) -> Self {
-        Self {}
-    }
-}
-
-impl Analyzer for MissingStreetNamesAnalyzer {
-    fn name(&self) -> &str {
-        "missing_street_names"
-    }
-
-    fn version(&self) -> &str {
-        "1.0.0"
-    }
-
-    fn description(&self) -> &str {
-        "Finds intersections where connected roads lack name tags, which can confuse navigation"
-    }
-
-    fn analyze(&self, query: &AnalysisQuery, data: &OsmData) -> Vec<AnalysisResult> {
-        let mut results = Vec::new();
-
-        // Find all intersections in the data
-        let intersection_nodes = find_road_intersections(data);
-
-        for &intersection_id in &intersection_nodes {
-            if let Some(intersection_node) = data.get_node(intersection_id) {
-                let intersection_point = intersection_node.to_point();
-
-                // Skip if intersection is outside query area
-                if !query
-                    .area
-                    .contains_point(intersection_point.x(), intersection_point.y())
-                {
-                    continue;
-                }
-
-                let mut result = AnalysisResult::new(intersection_id, ElementType::Node);
-
-                // Find all ways connected to this intersection
-                let connected_ways: Vec<_> = data
-                    .ways
-                    .values()
-                    .filter(|way| {
-                        is_road_way(way)
-                            && way.tags.get("junction") != Some(&"roundabout".into())
-                            && !way
-                                .tags
-                                .get("highway")
-                                .map_or(false, |v| v.ends_with("_link"))
-                            && way.nodes.contains(&intersection_id)
-                    })
-                    .collect();
-
-                // Check each connected way for missing name
-                for way in &connected_ways {
-                    if !way.tags.contains_key("name") {
-                        let mut context = std::collections::HashMap::new();
-                        context.insert("unnamed_way_id".into(), way.id.to_string());
-
-                        if let Some(highway_type) = way.tags.get("highway") {
-                            context.insert("highway_type".into(), highway_type.clone());
-                        }
-
-                        let finding = Finding {
-                            category: ProblemCategory::Missing,
-                            severity: Severity::Medium,
-                            message: Some(format!(
-                                "Intersection has unnamed road (way {}). This can confuse navigation systems.",
-                                way.id
-                            )),
-                            recommendation: Some("Add name tag to the road".into()),
-                            context,
-                        };
-
-                        result.add_finding(finding);
-                        break; // Only report once per intersection
-                    }
-                }
-
-                // Only add result if we found issues OR if all roads are properly named
-                // (for testing purposes, we want to know about good intersections too)
-                results.push(result);
-            }
-        }
-
-        results
     }
 }

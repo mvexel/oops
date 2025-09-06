@@ -261,7 +261,7 @@ pub fn calculate_sidewalk_coverage(
                 let lat = p1.y() + (p2.y() - p1.y()) * segment_t;
                 geo::Point::new(lon, lat)
             } else {
-                target_points[segment_index].clone()
+                target_points[segment_index]
             };
 
             // Check if this sample point has nearby sidewalk coverage
@@ -301,8 +301,7 @@ pub fn calculate_point_to_linestring_distance(
     let points: Vec<_> = linestring.points().collect();
     if points.len() < 2 {
         // Degenerate case - treat as point-to-point distance
-        return points
-            .get(0)
+        return points.first()
             .map_or(f64::MAX, |p| point.haversine_distance(p));
     }
 
@@ -684,13 +683,9 @@ pub fn find_logical_intersections_in_bbox(
                 );
 
                 for neighbor in rtree.locate_in_envelope_intersecting(&search_envelope) {
-                    if !visited_nodes.contains(&neighbor.node_id) {
-                        if current_node_point.haversine_distance(&neighbor.point)
-                            <= max_cluster_distance
-                        {
-                            visited_nodes.insert(neighbor.node_id);
-                            queue.push_back(neighbor.node_id);
-                        }
+                    if !visited_nodes.contains(&neighbor.node_id) && current_node_point.haversine_distance(&neighbor.point) <= max_cluster_distance {
+                        visited_nodes.insert(neighbor.node_id);
+                        queue.push_back(neighbor.node_id);
                     }
                 }
             }
@@ -733,7 +728,7 @@ pub fn build_node_to_ways_index(data: &OsmData) -> HashMap<i64, Vec<i64>> {
             for &node_id in &way.nodes {
                 node_to_ways
                     .entry(node_id)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(way.id);
             }
         }
@@ -817,8 +812,7 @@ pub fn extract_intersection_metadata_optimized(
     // Analyze highway types
     let highway_types: Vec<String> = connected_ways
         .iter()
-        .filter_map(|way| way.tags.get("highway"))
-        .map(|ht| ht.clone())
+        .filter_map(|way| way.tags.get("highway")).cloned()
         .collect();
     metadata.insert("highway_types".into(), highway_types.join(","));
 
@@ -1193,7 +1187,7 @@ fn add_edge_from_path(
         let is_roundabout = way
             .tags
             .get("junction")
-            .map_or(false, |j| j == "roundabout");
+            .is_some_and(|j| j == "roundabout");
 
         let forward =
             oneway == Some("yes") || oneway == Some("true") || oneway == Some("1") || is_roundabout;
