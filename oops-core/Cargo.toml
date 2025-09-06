@@ -8,3 +8,4 @@ geo = "0.28.0"
 serde = { version = "1.0.203", features = ["derive"] }
 geos = "0.2.2"
 rstar = "0.12.2"
+petgraph = "0.6.5"

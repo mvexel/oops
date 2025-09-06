@@ -24,6 +24,7 @@ pub enum ProblemCategory {
     Outdated,
     Invalid,
     Inconsistent,
+    Info,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

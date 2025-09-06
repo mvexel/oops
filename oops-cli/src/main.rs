@@ -4,7 +4,7 @@ use oops_analyzers::get_all_analyzers;
 use oops_core::{
     AnalysisQuery, AnalysisResult, AnalyzerRegistry, BoundingBox, ElementType, OsmData,
 };
-use oops_ingest::{PbfFilter, PbfReader};
+use oops_ingest::{OverpassClient, PbfFilter, PbfReader};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -29,6 +29,10 @@ enum Commands {
         #[arg(short, long)]
         bbox: Option<String>,
 
+        /// Overpass query (requires bbox)
+        #[arg(short, long)]
+        query: Option<String>,
+
         /// Analyzer to run (default: all)
         #[arg(short, long)]
         analyzer: Option<String>,
@@ -39,7 +43,11 @@ enum Commands {
 
         /// Verbose output
         #[arg(short, long)]
-        verbose: bool,
+        _verbose: bool,
+
+        /// Enable validation mode (compare against ground truth tags)
+        #[arg(long)]
+        validate: bool,
     },
     /// List available analyzers
     List,
@@ -61,11 +69,13 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Commands::Analyze {
             file,
             bbox,
+            query,
             analyzer,
             format,
-            verbose,
+            _verbose,
+            validate,
         } => {
-            analyze_command(file, bbox, analyzer, format, verbose).await?;
+            analyze_command(file, bbox, query, analyzer, format, _verbose, validate).await?;
         }
         Commands::List => {
             list_analyzers();
@@ -84,17 +94,34 @@ fn create_and_populate_registry() -> AnalyzerRegistry {
     registry
 }
 
+/// Create a new analyzer registry in validation mode
+fn create_validation_registry() -> AnalyzerRegistry {
+    use oops_analyzers::IntersectionAnalyzer;
+    
+    let mut registry = AnalyzerRegistry::new();
+    
+    // Register intersection analyzer in validation mode
+    registry.register(Box::new(IntersectionAnalyzer::validation_mode()));
+    
+    // Add other analyzers in normal mode for now
+    for analyzer in get_all_analyzers() {
+        if analyzer.name() != "intersections" {
+            registry.register(analyzer);
+        }
+    }
+    
+    registry
+}
+
 async fn analyze_command(
     file: Option<PathBuf>,
     bbox: Option<String>,
+    query: Option<String>,
     analyzer: Option<String>,
     format: OutputFormat,
-    verbose: bool,
+    _verbose: bool,
+    validate: bool,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    if verbose {
-        println!("Loading OSM data...");
-    }
-
     // Parse bounding box if provided
     let query_bbox = if let Some(bbox_str) = bbox {
         Some(parse_bbox(&bbox_str)?)
@@ -102,11 +129,10 @@ async fn analyze_command(
         None
     };
 
-    // Load data from file or error if no input
+    // Load data from file or Overpass API
+    eprintln!("Loading OSM data...");
     let data = if let Some(pbf_path) = file {
-        if verbose {
-            println!("Reading PBF file: {:?}", pbf_path);
-        }
+        eprintln!("Reading PBF file: {:?}", pbf_path);
         let reader = PbfReader::new();
         let filter = if let Some(bbox) = &query_bbox {
             Some(PbfFilter::new().in_bbox(bbox))
@@ -114,34 +140,69 @@ async fn analyze_command(
             None
         };
         reader.read_file(&pbf_path, filter).await?
+    } else if let (Some(bbox), Some(overpass_query)) = (&query_bbox, &query) {
+        eprintln!("Fetching data from Overpass API...");
+        let client = OverpassClient::new();
+        client.fetch_in_bbox(bbox, overpass_query).await?
     } else {
-        return Err("Either --file or --bbox with Overpass API must be provided".into());
+        return Err("Either --file or --bbox with --query must be provided".into());
     };
 
-    if verbose {
-        println!(
-            "Loaded {} nodes and {} ways",
-            data.nodes.len(),
-            data.ways.len()
-        );
-    }
+    eprintln!(
+        "Loaded {} nodes and {} ways",
+        data.nodes.len(),
+        data.ways.len()
+    );
 
     // Set up analyzer registry
-    let registry = create_and_populate_registry();
+    let registry = if validate {
+        create_validation_registry()
+    } else {
+        create_and_populate_registry()
+    };
 
     // Run analysis
     let bbox = query_bbox.unwrap_or_else(|| BoundingBox::new(-180.0, -90.0, 180.0, 90.0));
-    let query = AnalysisQuery::new(bbox);
+    let analysis_query = AnalysisQuery::new(bbox);
 
     let results: Vec<(String, Vec<AnalysisResult>)> = if let Some(analyzer_name) = analyzer {
         // Run specific analyzer
-        vec![(
-            analyzer_name.clone(),
-            registry.analyze(&analyzer_name, &query, &data)?,
-        )]
+        eprintln!("Running analyzer: {}", analyzer_name);
+        let result = registry.analyze(&analyzer_name, &analysis_query, &data)?;
+        let finding_count: usize = result.iter().map(|r| r.findings.len()).sum();
+        eprintln!("Completed {} ({} findings)", analyzer_name, finding_count);
+
+        vec![(analyzer_name.clone(), result)]
     } else {
         // Run all analyzers
-        registry.analyze_all(&query, &data).into_iter().collect()
+        let analyzer_names: Vec<String> = registry.list().iter().map(|s| s.to_string()).collect();
+        eprintln!("Running {} analyzers...", analyzer_names.len());
+
+        let mut results = Vec::new();
+
+        for (idx, analyzer_name) in analyzer_names.iter().enumerate() {
+            eprintln!(
+                "Running {} ({}/{})",
+                analyzer_name,
+                idx + 1,
+                analyzer_names.len()
+            );
+            let result = registry.analyze(analyzer_name, &analysis_query, &data)?;
+            let finding_count: usize = result.iter().map(|r| r.findings.len()).sum();
+            eprintln!("Completed {} ({} findings)", analyzer_name, finding_count);
+
+            results.push((analyzer_name.clone(), result));
+        }
+
+        let total_findings: usize = results
+            .iter()
+            .flat_map(|(_, results)| results)
+            .map(|r| r.findings.len())
+            .sum();
+
+        eprintln!("Analysis complete: {} total findings", total_findings);
+
+        results
     };
 
     // Output results
@@ -153,9 +214,9 @@ async fn analyze_command(
 fn list_analyzers() {
     let registry = create_and_populate_registry();
 
-    println!("Available analyzers:");
+    eprintln!("Available analyzers:");
     for info in registry.get_all_info() {
-        println!("  {} (v{}) - {}", info.name, info.version, info.description);
+        eprintln!("  {} (v{}) - {}", info.name, info.version, info.description);
     }
 }
 
@@ -190,14 +251,14 @@ fn output_results(
                 .map(|r| r.findings.len())
                 .sum();
 
-            println!("Analysis Summary:");
-            println!("  Issues found: {}", total_findings);
+            eprintln!("Analysis Summary:");
+            eprintln!("  Issues found: {}", total_findings);
 
             if total_findings > 0 {
-                println!("\nIssues by Analyzer:");
+                eprintln!("\nIssues by Analyzer:");
                 for (analyzer_name, analyzer_results) in &results {
                     if !analyzer_results.is_empty() {
-                        println!("  - {}: {} issues", analyzer_name, analyzer_results.len());
+                        eprintln!("  - {}: {} issues", analyzer_name, analyzer_results.len());
                     }
                 }
             }

@@ -156,13 +156,20 @@ impl Analyzer for PedestrianCompletenessAnalyzer {
 
         // Phase 2: Analyze each road
         for way in data.ways.values() {
+            if !way.tags.contains_key("highway") {
+                if debug_mode {
+                    eprintln!("SKIP {}: not a highway", way.id);
+                }
+                continue;
+            }
+
             let way_name = way.tags.get("name").unwrap_or(&"unnamed".to_string()).clone();
             let highway_type = way.tags.get("highway").unwrap_or(&"unknown".to_string()).clone();
             
             if !self.should_analyze_way(way) {
                 if debug_mode {
-                    eprintln!("SKIP {}: {} '{}' - not analyzable road type", 
-                        way.id, highway_type, way_name);
+                    eprintln!("SKIP {}: {} - not a relevant road type", 
+                        way.id, highway_type);
                 }
                 continue;
             }

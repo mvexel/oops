@@ -5,6 +5,7 @@ pub mod osm_analysis;
 pub use analysis::*;
 pub use data::*;
 pub use osm_analysis::*;
+pub use petgraph::Direction;
 
 #[cfg(test)]
 mod tests {
