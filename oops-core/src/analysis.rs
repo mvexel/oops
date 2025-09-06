@@ -142,9 +142,9 @@ impl AnalyzerRegistry {
     }
 
     /// Register an analyzer by name
-    pub fn register<A: Analyzer + 'static>(&mut self, analyzer: A) {
+    pub fn register(&mut self, analyzer: Box<dyn Analyzer>) {
         let name = analyzer.name().into();
-        self.analyzers.insert(name, Box::new(analyzer));
+        self.analyzers.insert(name, analyzer);
     }
 
     /// Get analyzer by name

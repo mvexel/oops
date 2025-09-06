@@ -175,9 +175,9 @@ fn main() {
     let mut registry = AnalyzerRegistry::new();
 
     println!("📝 Registering analyzers...");
-    registry.register(RestaurantAnalyzer);
-    registry.register(AccessibilityAnalyzer);
-    registry.register(HighwaySafetyAnalyzer);
+    registry.register(Box::new(RestaurantAnalyzer));
+    registry.register(Box::new(AccessibilityAnalyzer));
+    registry.register(Box::new(HighwaySafetyAnalyzer));
 
     // List all registered analyzers
     println!("\n📋 Registered analyzers:");

@@ -12,6 +12,12 @@ pub struct OverpassClient {
     base_url: String,
 }
 
+impl Default for OverpassClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OverpassClient {
     pub fn new() -> Self {
         Self::with_timeout(300)

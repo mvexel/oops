@@ -135,6 +135,12 @@ pub struct OsmData {
     node_index: RTree<NodeIndex>,
 }
 
+impl Default for OsmData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OsmData {
     pub fn new() -> Self {
         Self {

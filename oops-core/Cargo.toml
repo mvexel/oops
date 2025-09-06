@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-geo = { workspace = true }
-rstar = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+geo = "0.28.0"
+serde = { version = "1.0.203", features = ["derive"] }
+geos = "0.2.2"
+rstar = "0.12.2"

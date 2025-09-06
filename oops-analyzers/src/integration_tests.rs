@@ -179,7 +179,7 @@ mod tests {
     fn test_analyzer_registry_integration() {
         // Test that our analyzer works with the registry system
         let mut registry = AnalyzerRegistry::new();
-        registry.register(MissingStreetNamesAnalyzer::new());
+        registry.register(Box::new(MissingStreetNamesAnalyzer::new()));
 
         // Verify analyzer is registered
         assert!(registry.get("missing_street_names").is_some());

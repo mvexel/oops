@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-oops-core = { version = "0.1.0",  path = "../oops-core" }
+oops-core = { path = "../oops-core" }
+rstar = "0.12.2"
 oops-ingest = { version = "0.1.0", path = "../oops-ingest" }
 geo = { workspace = true }
 serde = { workspace = true }

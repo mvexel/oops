@@ -27,6 +27,12 @@ pub struct PbfReader {
     // Could add configuration here
 }
 
+impl Default for PbfReader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PbfReader {
     pub fn new() -> Self {
         Self {}

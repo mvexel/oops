@@ -391,8 +391,8 @@ mod tests {
         }
 
         // Test registration
-        registry.register(SimpleAnalyzer);
-        registry.register(AdvancedAnalyzer);
+        registry.register(Box::new(SimpleAnalyzer));
+        registry.register(Box::new(AdvancedAnalyzer));
 
         // Test listing
         let analyzers = registry.list();
