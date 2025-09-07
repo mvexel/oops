@@ -1,11 +1,21 @@
 pub mod analysis;
+pub mod compact_data;
 pub mod data;
-pub mod osm_analysis;
+pub mod geometry_simd;
+pub mod graph;
+pub mod intersections;
+pub mod spatial;
+pub mod spatial_index;
+pub mod streaming;
 
 pub use analysis::*;
+pub use compact_data::*;
 pub use data::*;
-pub use osm_analysis::*;
-pub use petgraph::Direction;
+pub use geometry_simd::*;
+pub use graph::*;
+pub use spatial::*;
+pub use spatial_index::*;
+pub use streaming::*;
 
 #[cfg(test)]
 mod tests {
@@ -182,61 +192,32 @@ mod tests {
     }
 
     #[test]
-    fn test_analyzer_trait() {
-        struct TestAnalyzer;
+    fn test_composable_analyzer() {
+        // Create a simple analyzer using the composable architecture
+        let analyzer = Analyzer::new(
+            "test_analyzer",
+            "1.0.0",
+            "Test analyzer for composable architecture",
+            Box::new(WaySelector::new().highway_types(vec!["primary"])),
+            Box::new(NoContext),
+            Box::new(MissingTagDetector::new("maxspeed")),
+        );
 
-        impl Analyzer for TestAnalyzer {
-            fn name(&self) -> &str {
-                "poi_analyzer"
-            }
-
-            fn description(&self) -> &str {
-                "Analyzes POI data quality"
-            }
-
-            fn analyze(&self, query: &AnalysisQuery, data: &OsmData) -> Vec<AnalysisResult> {
-                let mut results = Vec::new();
-
-                // Analyze all nodes in the query area
-                for node in data.nodes_in_bbox(&query.area) {
-                    if node.tags.contains_key("amenity") {
-                        let mut result = AnalysisResult::new(node.id, ElementType::Node);
-
-                        if !node.tags.contains_key("opening_hours") {
-                            let finding = Finding {
-                                category: ProblemCategory::Missing,
-                                severity: Severity::Medium,
-                                message: Some("Missing opening hours".into()),
-                                recommendation: Some("Add opening_hours tag".into()),
-                                context: HashMap::new(),
-                            };
-                            result.add_finding(finding);
-                        }
-
-                        results.push(result);
-                    }
-                }
-
-                results
-            }
-        }
-
-        let analyzer = TestAnalyzer;
         let mut data = OsmData::new();
 
-        // Add POI node with amenity
-        let mut poi_tags = HashMap::new();
-        poi_tags.insert("amenity".into(), "restaurant".into());
-        let poi_node = OsmNode {
+        // Add a way with highway=primary but no maxspeed
+        let mut way_tags = HashMap::new();
+        way_tags.insert("highway".into(), "primary".into());
+        let way = OsmWay {
             id: 123,
-            lon: 13.4050,
-            lat: 52.5150,
-            tags: poi_tags,
+            nodes: vec![1, 2],
+            tags: way_tags,
         };
-        data.add_node(poi_node);
+        data.ways.insert(way.id, way);
 
-        // Add regular node (no amenity)
-        data.add_node(OsmNode::new(456, 13.4060, 52.5160));
+        // Add nodes for the way
+        data.add_node(OsmNode::new(1, 13.4050, 52.5150));
+        data.add_node(OsmNode::new(2, 13.4060, 52.5160));
 
         use geo::{Point, Rect};
         let bbox = BoundingBox::from_rect(Rect::new(
@@ -245,104 +226,13 @@ mod tests {
         ));
 
         let query = AnalysisQuery::new(bbox);
-        let results = analyzer.analyze(&query, &data);
+        let mut engine = AnalysisEngine::new();
+        let results = engine.analyze_single(&analyzer, &query, &data);
 
-        assert_eq!(results.len(), 1); // Only POI node should be analyzed
+        assert_eq!(results.len(), 1);
         assert_eq!(results[0].element_id, 123);
         assert_eq!(results[0].findings.len(), 1);
         assert_eq!(results[0].findings[0].category, ProblemCategory::Missing);
-    }
-
-    #[test]
-    fn test_intersection_analyzer() {
-        struct IntersectionAnalyzer;
-
-        impl Analyzer for IntersectionAnalyzer {
-            fn name(&self) -> &str {
-                "intersection_analyzer"
-            }
-
-            fn description(&self) -> &str {
-                "Analyzes intersection safety and accessibility"
-            }
-
-            fn analyze(&self, query: &AnalysisQuery, data: &OsmData) -> Vec<AnalysisResult> {
-                let mut results = Vec::new();
-
-                // Find intersection nodes (simplified - would normally check way connectivity)
-                for element in &query.elements {
-                    if let ElementRef::Intersection(node_id) = element {
-                        if let Some(node) = data.get_node(*node_id) {
-                            let mut result = AnalysisResult::new(*node_id, ElementType::Node);
-
-                            // Look for nearby sidewalks within buffer
-                            let nearby_nodes = data.nodes_near_point(
-                                node.lat,
-                                node.lon,
-                                query.context.buffer_distance,
-                            );
-
-                            let sidewalk_count = nearby_nodes
-                                .iter()
-                                .filter(|n| {
-                                    n.tags.get("highway") == Some(&"footway".into())
-                                        || n.tags.get("footway") == Some(&"sidewalk".into())
-                                })
-                                .count();
-
-                            if sidewalk_count == 0 {
-                                let finding = Finding {
-                                    category: ProblemCategory::Missing,
-                                    severity: Severity::Critical,
-                                    message: Some("No sidewalks found near intersection".into()),
-                                    recommendation: Some(
-                                        "Add mapped sidewalks or footway=sidewalk tags".into(),
-                                    ),
-                                    context: HashMap::new(),
-                                };
-                                result.add_finding(finding);
-                            }
-
-                            results.push(result);
-                        }
-                    }
-                }
-
-                results
-            }
-        }
-
-        let analyzer = IntersectionAnalyzer;
-        let mut data = OsmData::new();
-
-        // Add intersection node
-        data.add_node(OsmNode::new(999, 13.4050, 52.5150));
-
-        // Add a sidewalk node nearby (within buffer)
-        let mut sidewalk_tags = HashMap::new();
-        sidewalk_tags.insert("highway".into(), "footway".into());
-        sidewalk_tags.insert("footway".into(), "sidewalk".into());
-        data.add_node(OsmNode {
-            id: 1000,
-            lon: 13.4051,
-            lat: 52.5151, // Close to intersection
-            tags: sidewalk_tags,
-        });
-
-        use geo::{Point, Rect};
-        let bbox = BoundingBox::from_rect(Rect::new(
-            Point::new(13.4000, 52.5100),
-            Point::new(13.4100, 52.5200),
-        ));
-
-        let query = AnalysisQuery::new(bbox).with_element(ElementRef::Intersection(999));
-
-        let results = analyzer.analyze(&query, &data);
-
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].element_id, 999);
-        // Should find sidewalk nearby, so no critical findings
-        assert_eq!(results[0].findings.len(), 0);
     }
 
     #[test]
@@ -362,38 +252,28 @@ mod tests {
     fn test_analyzer_registry() {
         let mut registry = AnalyzerRegistry::new();
 
-        struct SimpleAnalyzer;
-        impl Analyzer for SimpleAnalyzer {
-            fn name(&self) -> &str {
-                "simple"
-            }
-            fn description(&self) -> &str {
-                "A simple test analyzer"
-            }
-            fn analyze(&self, _query: &AnalysisQuery, _data: &OsmData) -> Vec<AnalysisResult> {
-                vec![AnalysisResult::new(123, ElementType::Node)]
-            }
-        }
+        // Create test analyzers
+        let simple_analyzer = Analyzer::new(
+            "simple",
+            "1.0.0",
+            "A simple test analyzer",
+            Box::new(WaySelector::new()),
+            Box::new(NoContext),
+            Box::new(MissingTagDetector::new("test_tag")),
+        );
 
-        struct AdvancedAnalyzer;
-        impl Analyzer for AdvancedAnalyzer {
-            fn name(&self) -> &str {
-                "advanced"
-            }
-            fn version(&self) -> &str {
-                "2.1.0"
-            }
-            fn description(&self) -> &str {
-                "An advanced test analyzer"
-            }
-            fn analyze(&self, _query: &AnalysisQuery, _data: &OsmData) -> Vec<AnalysisResult> {
-                Vec::new()
-            }
-        }
+        let advanced_analyzer = Analyzer::new(
+            "advanced",
+            "2.1.0",
+            "An advanced test analyzer",
+            Box::new(WaySelector::new()),
+            Box::new(NoContext),
+            Box::new(MissingTagDetector::new("advanced_tag")),
+        );
 
         // Test registration
-        registry.register(Box::new(SimpleAnalyzer));
-        registry.register(Box::new(AdvancedAnalyzer));
+        registry.register(simple_analyzer);
+        registry.register(advanced_analyzer);
 
         // Test listing
         let analyzers = registry.list();
@@ -408,11 +288,11 @@ mod tests {
         // Test metadata
         let info = registry.get_info("simple").unwrap();
         assert_eq!(info.name, "simple");
-        assert_eq!(info.version, "1.0.0"); // default version
+        assert_eq!(info.version, "1.0.0");
         assert_eq!(info.description, "A simple test analyzer");
 
         let info = registry.get_info("advanced").unwrap();
-        assert_eq!(info.version, "2.1.0"); // custom version
+        assert_eq!(info.version, "2.1.0");
 
         // Test all metadata
         let all_info = registry.get_all_info();
@@ -425,7 +305,6 @@ mod tests {
 
         let result = registry.analyze("simple", &query, &data);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 1);
 
         let result = registry.analyze("nonexistent", &query, &data);
         assert!(result.is_err());

@@ -37,7 +37,7 @@ cargo run --bin oops-cli -- analyze --file data.osm.pbf --format csv
 cargo run --bin oops-cli -- analyze --file data.osm.pbf --format json
 
 # Run specific analyzer
-cargo run --bin oops-cli -- analyze --file data.osm.pbf --analyzer missing_street_names
+cargo run --bin oops-cli -- analyze --file data.osm.pbf --analyzer missing_maxspeed
 ```
 
 ### Basic Usage
@@ -152,7 +152,7 @@ cargo test test_pbf_reader_slc_small -- --ignored --nocapture
 
 - **oops-core**: Fundamental data types (`OsmNode`, `OsmWay`, `OsmRelation`, `OsmData`) + analyzer framework
 - **oops-ingest**: Data loading from Overpass API and PBF files  
-- **oops-analyzers**: Quality analysis implementations (includes MissingStreetNamesAnalyzer)
+- **oops-analyzers**: Quality analysis implementations using composable architecture
 - **oops-cli**: Command-line interface with multiple output formats
 
 ### Plugin System
@@ -162,41 +162,28 @@ OOPS has a plugin system so you can develop your own custom analyzers:
 #### Creating Custom Analyzers
 
 ```rust
-use oops_core::{Analyzer, AnalysisQuery, AnalysisResult, *};
+use oops_core::analysis::*;
 
-struct MyAnalyzer;
-
-impl Analyzer for MyAnalyzer {
-    fn name(&self) -> &str { "my_analyzer" }
-    fn version(&self) -> &str { "1.0.0" }
-    fn description(&self) -> &str { "My custom quality analyzer" }
-    
-    fn analyze(&self, query: &AnalysisQuery, data: &OsmData) -> Vec<AnalysisResult> {
-        let mut results = Vec::new();
+// Create a composable analyzer for missing opening hours on restaurants
+pub fn build_restaurant_opening_hours_analyzer() -> Analyzer {
+    Analyzer::new(
+        "restaurant_opening_hours",
+        "1.0.0",
+        "Finds restaurants missing opening hours",
         
-        // Your analysis logic here
-        for node in data.nodes_in_bbox(&query.area) {
-            if let Some("restaurant") = node.tags.get("amenity").map(|s| s.as_str()) {
-                let mut result = AnalysisResult::new(node.id, ElementType::Node);
-                
-                if !node.tags.contains_key("opening_hours") {
-                    result.add_finding(Finding {
-                        category: ProblemCategory::Missing,
-                        severity: Severity::Medium,
-                        message: "Missing opening hours".into(),
-                        recommendation: Some("Add opening_hours tag".into()),
-                        context: HashMap::new(),
-                    });
-                }
-                
-                if !result.findings.is_empty() {
-                    results.push(result);
-                }
-            }
-        }
+        // Select restaurant nodes
+        Box::new(NodeSelector::new()
+            .has_tag("amenity", "restaurant")),
+            
+        // No additional context needed for this simple analyzer
+        Box::new(NoContextProvider::new()),
         
-        results
-    }
+        // Detect missing opening_hours tag
+        Box::new(MissingTagDetector::new("opening_hours")
+            .with_severity(Severity::Medium)
+            .with_message_template("Restaurant missing opening hours")
+            .with_recommendation_template("Add opening_hours tag to indicate when the restaurant is open"))
+    )
 }
 ```
 
@@ -228,15 +215,30 @@ let all_results = registry.analyze_all(&query, &data);
 
 #### Built-in Analyzers
 
-Current analyzers available in `oops-analyzers`:
-- **MissingStreetNamesAnalyzer**: Finds intersections where connected roads lack name tags
+The `oops-analyzers` crate provides several built-in analyzers to identify common data quality issues.
+
+##### `missing_maxspeed`
+
+-   **Purpose**: Identifies major roads that are missing a `maxspeed` tag.
+-   **How it works**:
+    1.  **Selector**: It selects OSM `way` elements that are tagged with `highway` values such as `motorway`, `trunk`, `primary`, `secondary`, or `tertiary`.
+    2.  **Detector**: For each selected way, it checks for the existence of the `maxspeed` tag.
+    3.  **Finding**: If a `maxspeed` tag is not present, it generates a finding, flagging the way as incomplete.
+
+##### `pedestrian_completeness`
+
+-   **Purpose**: Analyzes the coverage of sidewalks along roads to assess pedestrian infrastructure completeness.
+-   **How it works**:
+    1.  **Selector**: It selects OSM `way` elements representing roads where pedestrians are common (e.g., `highway=residential`, `highway=tertiary`).
+    2.  **Context Provider**: It uses a spatial context provider to find nearby OSM ways within a certain buffer distance of the selected road.
+    3.  **Detector**: It analyzes the nearby ways to determine if they are sidewalks (`highway=footway` and `footway=sidewalk`) and assesses whether the road has adequate sidewalk coverage.
+    4.  **Finding**: If sidewalk coverage is insufficient, it generates a finding.
 
 #### Plugin Examples
 
-See `oops-core/examples/plugin_system_demo.rs` for complete examples of:
-- **RestaurantAnalyzer**: Checks restaurant data completeness
-- **AccessibilityAnalyzer**: Validates wheelchair accessibility tags  
-- **HighwaySafetyAnalyzer**: Analyzes sidewalk information on roads
+See `oops-core/examples/plugin_system_demo.rs` for complete examples of the composable architecture with:
+- **Missing maxspeed analyzer**: Uses generic components with custom detector
+- **Pedestrian completeness analyzer**: Uses spatial context for sidewalk analysis
 
 Run the demo:
 ```bash
@@ -245,12 +247,9 @@ cd oops-core && cargo run --example plugin_system_demo
 
 ### Testing with Sample Data
 
-The project includes real OpenStreetMap data from Salt Lake City for testing:
+The project includes real OpenStreetMap data for testing:
 
 ```bash
-# Test built-in analyzer with real data
-cargo test test_missing_street_names_with_slc_data -- --ignored --nocapture
-
 # Test PBF parsing
 cargo test test_pbf_reader_slc_small -- --ignored --nocapture
 

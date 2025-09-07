@@ -96,21 +96,9 @@ fn create_and_populate_registry() -> AnalyzerRegistry {
 
 /// Create a new analyzer registry in validation mode
 fn create_validation_registry() -> AnalyzerRegistry {
-    use oops_analyzers::IntersectionAnalyzer;
-    
-    let mut registry = AnalyzerRegistry::new();
-    
-    // Register intersection analyzer in validation mode
-    registry.register(Box::new(IntersectionAnalyzer::validation_mode()));
-    
-    // Add other analyzers in normal mode for now
-    for analyzer in get_all_analyzers() {
-        if analyzer.name() != "intersections" {
-            registry.register(analyzer);
-        }
-    }
-    
-    registry
+    // For now, just return the same as normal mode
+    // TODO: Implement validation-specific analyzers when needed
+    create_and_populate_registry()
 }
 
 async fn analyze_command(
@@ -134,7 +122,9 @@ async fn analyze_command(
     let data = if let Some(pbf_path) = file {
         eprintln!("Reading PBF file: {:?}", pbf_path);
         let reader = PbfReader::new();
-        let filter = query_bbox.as_ref().map(|bbox| PbfFilter::new().in_bbox(bbox));
+        let filter = query_bbox
+            .as_ref()
+            .map(|bbox| PbfFilter::new().in_bbox(bbox));
         reader.read_file(&pbf_path, filter).await?
     } else if let (Some(bbox), Some(overpass_query)) = (&query_bbox, &query) {
         eprintln!("Fetching data from Overpass API...");
@@ -356,9 +346,9 @@ fn create_geometry_from_element(
     osm_data: &OsmData,
 ) -> Option<Geometry> {
     match element_type {
-        ElementType::Node => {
-            osm_data.get_node(element_id).map(|node| Geometry::new(GeoValue::Point(vec![node.lon, node.lat])))
-        }
+        ElementType::Node => osm_data
+            .get_node(element_id)
+            .map(|node| Geometry::new(GeoValue::Point(vec![node.lon, node.lat]))),
         ElementType::Way => {
             if let Some(way) = osm_data.ways.get(&element_id) {
                 let coords: Option<Vec<Vec<f64>>> = way

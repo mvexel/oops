@@ -18,3 +18,13 @@ petgraph = "0.6"
 clap = { version = "4.0", features = ["derive"] }
 tracing = "0.1"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+log = "0.4"
+env_logger = "0.10"
+geojson = "0.24"
+# Performance optimization dependencies
+rayon = "1.7"
+kdtree = "0.7"
+wide = "0.7"
+criterion = { version = "0.5", features = ["html_reports"] }
+dashmap = "5.5"
+parking_lot = "0.12"

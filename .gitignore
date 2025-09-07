@@ -5,3 +5,14 @@ Cargo.lock
 .DS_Store
 sample_data/
 .aider*
+
+# Generated output files
+*.geojson
+*.py
+
+# Temporary analysis files
+*_intersections_*.geojson
+*_nodes.txt
+
+# Internal development docs
+docs/

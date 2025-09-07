@@ -4,8 +4,21 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-geo = "0.28.0"
-serde = { version = "1.0.203", features = ["derive"] }
+geo = { workspace = true }
+serde = { workspace = true }
 geos = "0.2.2"
-rstar = "0.12.2"
-petgraph = "0.6.5"
+rstar = { workspace = true }
+petgraph = { workspace = true }
+rayon = { workspace = true }
+kdtree = { workspace = true }
+wide = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+num_cpus = "1.16"
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "spatial_performance"
+harness = false

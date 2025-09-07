@@ -200,3 +200,20 @@ impl OsmData {
             .collect()
     }
 }
+
+impl Clone for OsmData {
+    fn clone(&self) -> Self {
+        let mut cloned = Self::new();
+        
+        // Clone all nodes (this will rebuild the spatial index)
+        for node in self.nodes.values() {
+            cloned.add_node(node.clone());
+        }
+        
+        // Clone ways and relations
+        cloned.ways = self.ways.clone();
+        cloned.relations = self.relations.clone();
+        
+        cloned
+    }
+}
