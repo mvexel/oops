@@ -193,21 +193,27 @@ pub fn calculate_sidewalk_coverage(
     }
 }
 
-/// Calculate the minimum distance from a point to a LineString using point-to-segment distance.
+/// Calculate the minimum distance from a point to a LineString using proper point-to-segment distance.
 pub fn calculate_point_to_linestring_distance(
     point: &geo::Point,
     linestring: &geo::LineString,
 ) -> f64 {
-    use geo::HaversineDistance;
+    use geo::{ClosestPoint, HaversineDistance};
+    
     linestring
         .lines()
         .map(|line| {
-            // This is a simplified distance check. For higher accuracy, especially on long segments,
-            // a proper point-to-great-circle-segment distance would be needed.
-            // However, for typical OSM data, this is a reasonable approximation.
-            let d1 = point.haversine_distance(&line.start_point());
-            let d2 = point.haversine_distance(&line.end_point());
-            d1.min(d2)
+            match line.closest_point(point) {
+                geo::Closest::SinglePoint(closest) | geo::Closest::Intersection(closest) => {
+                    point.haversine_distance(&closest)
+                }
+                geo::Closest::Indeterminate => {
+                    // Fallback to endpoint distance if closest point can't be determined
+                    let d1 = point.haversine_distance(&line.start_point());
+                    let d2 = point.haversine_distance(&line.end_point());
+                    d1.min(d2)
+                }
+            }
         })
         .fold(f64::MAX, f64::min)
 }

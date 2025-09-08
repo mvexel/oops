@@ -168,15 +168,21 @@ impl ProblemDetector for SidewalkCoverageDetector {
         // Create references for the function call
         let parallel_sidewalk_refs: Vec<_> = parallel_sidewalks.iter().collect();
 
+        // Get the highway-specific distance threshold
+        let highway_type = target_way.tags.get("highway").map(|s| s.as_str()).unwrap_or("unknown");
+        let distance_threshold = match highway_type {
+            "residential" | "unclassified" => 20.0,
+            "tertiary" => 25.0,
+            "secondary" => 30.0,
+            "primary" => 35.0,
+            _ => 20.0,
+        };
+
         // Use the new, more accurate coverage calculation
         let coverage_ratio = calculate_sidewalk_coverage(
             target_way,
             &parallel_sidewalk_refs,
-            context
-                .spatial_context
-                .nearby_ways
-                .first()
-                .map_or(20.0, |way| way.distance), // Use a reasonable default
+            distance_threshold,
             data,
         );
 
@@ -386,13 +392,36 @@ pub fn build_pedestrian_completeness_analyzer() -> Analyzer {
         ),
         // GENERIC component from core with sidewalk-specific filter  
         Box::new(oops_core::analysis::SpatialContext::with_highway_thresholds(|tags| {
-            // Sidewalk detection logic - now properly separated in analyzer layer
-            (tags.get("highway") == Some(&"footway".to_string()) &&
-             tags.get("footway") == Some(&"sidewalk".to_string())) ||
-            (tags.get("highway") == Some(&"footway".to_string()) &&
-             !tags.contains_key("footway")) ||
-            (tags.get("highway") == Some(&"path".to_string()) &&
-             tags.get("footway") == Some(&"sidewalk".to_string()))
+            // Expanded pedestrian infrastructure detection logic
+            let highway = tags.get("highway").map(|s| s.as_str());
+            let footway = tags.get("footway").map(|s| s.as_str());
+            let foot = tags.get("foot").map(|s| s.as_str());
+            let bicycle = tags.get("bicycle").map(|s| s.as_str());
+            
+            match highway {
+                // Traditional sidewalks and crossings
+                Some("footway") => {
+                    footway == Some("sidewalk") ||  // explicit sidewalks
+                    footway == Some("crossing") ||  // pedestrian crossings
+                    footway.is_none()               // generic footways (likely sidewalks)
+                }
+                
+                // Paths - both sidewalks and mixed-use
+                Some("path") => {
+                    footway == Some("sidewalk") ||  // explicit sidewalks
+                    (bicycle == Some("designated") && foot != Some("no"))  // mixed-use unless foot=no
+                }
+                
+                // Cycleways that allow pedestrians
+                Some("cycleway") => {
+                    foot == Some("yes") || 
+                    foot == Some("designated") ||
+                    foot == Some("permissive") ||
+                    foot.is_none()  // Default assumption: cycleways usually allow pedestrians
+                }
+                
+                _ => false
+            }
         })),
         // ANALYZER-SPECIFIC component (lives here, not in core!)
         Box::new(SidewalkCoverageDetector::new(0.5)), // Use legacy default (50% coverage)

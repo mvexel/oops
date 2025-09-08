@@ -193,15 +193,36 @@ impl ElementSelector for WaySelector {
 
                 true
             })
-            .filter(|way| {
+            .filter_map(|way| {
                 // Spatial filter - way in query area
-                way.nodes.iter().any(|&node_id| {
+                let has_nodes_in_area = way.nodes.iter().any(|&node_id| {
                     if let Some(node) = data.get_node(node_id) {
                         query.area.contains_point(node.lon, node.lat)
                     } else {
                         false
                     }
-                })
+                });
+                
+                if !has_nodes_in_area {
+                    return None;
+                }
+                
+                // Check if way extends beyond PBF boundary - if so, exclude it
+                if let Some(boundary) = &data.boundary {
+                    let all_nodes_within_boundary = way.nodes.iter().all(|&node_id| {
+                        if let Some(node) = data.get_node(node_id) {
+                            boundary.contains_point(node.lon, node.lat)
+                        } else {
+                            false // Missing node - exclude way
+                        }
+                    });
+                    
+                    if !all_nodes_within_boundary {
+                        return None; // Exclude way that extends beyond boundary
+                    }
+                }
+                
+                Some(way.clone())
             })
             .filter_map(|way| {
                 // Convert to SelectedElement
@@ -219,7 +240,7 @@ impl ElementSelector for WaySelector {
                 Some(SelectedElement {
                     element_id: way.id,
                     element_type: ElementType::Way,
-                    tags: way.tags.clone(),
+                    tags: way.tags,
                     geometry: ElementGeometry::LineString { nodes },
                 })
             })

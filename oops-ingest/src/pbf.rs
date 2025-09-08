@@ -54,8 +54,27 @@ impl PbfReader {
         progress: &dyn ProgressReporter,
     ) -> Result<OsmData> {
         let filter = filter.unwrap_or_default();
-        let reader = ElementReader::from_path(path)?;
+        let reader = ElementReader::from_path(&path)?;
         let mut osm_data = OsmData::new();
+        
+        // Extract boundary from PBF header
+        if let Ok(mut blob_reader) = osmpbf::BlobReader::from_path(&path) {
+            if let Some(Ok(blob)) = blob_reader.next() {
+                if let Ok(header) = blob.to_headerblock() {
+                    if let Some(bbox) = header.bbox() {
+                        let boundary = BoundingBox::new(
+                            bbox.left,
+                            bbox.bottom, 
+                            bbox.right,
+                            bbox.top
+                        );
+                        osm_data.set_boundary(boundary);
+                        eprintln!("Set PBF boundary: ({:.6}, {:.6}, {:.6}, {:.6})", 
+                                 bbox.left, bbox.bottom, bbox.right, bbox.top);
+                    }
+                }
+            }
+        }
         let mut count = 0;
         let mut total_processed = 0;
 

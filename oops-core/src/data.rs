@@ -132,6 +132,7 @@ pub struct OsmData {
     pub nodes: HashMap<OsmId, OsmNode>,
     pub ways: HashMap<OsmId, OsmWay>,
     pub relations: HashMap<OsmId, OsmRelation>,
+    pub boundary: Option<BoundingBox>,
     node_index: RTree<NodeIndex>,
 }
 
@@ -147,6 +148,7 @@ impl OsmData {
             nodes: HashMap::new(),
             ways: HashMap::new(),
             relations: HashMap::new(),
+            boundary: None,
             node_index: RTree::new(),
         }
     }
@@ -199,21 +201,27 @@ impl OsmData {
             .map(|node_idx| &node_idx.node)
             .collect()
     }
+
+    /// Set the data boundary (usually from PBF file header)
+    pub fn set_boundary(&mut self, boundary: BoundingBox) {
+        self.boundary = Some(boundary);
+    }
 }
 
 impl Clone for OsmData {
     fn clone(&self) -> Self {
         let mut cloned = Self::new();
-        
+
         // Clone all nodes (this will rebuild the spatial index)
         for node in self.nodes.values() {
             cloned.add_node(node.clone());
         }
-        
-        // Clone ways and relations
+
+        // Clone ways, relations, and boundary
         cloned.ways = self.ways.clone();
         cloned.relations = self.relations.clone();
-        
+        cloned.boundary = self.boundary.clone();
+
         cloned
     }
 }
