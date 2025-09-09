@@ -6,6 +6,7 @@
 use crate::data::{OsmData, OsmWay};
 use crate::graph::RoadGraph;
 use crate::spatial::{way_to_linestring, WayWithLineString};
+use geo::line_intersection::{line_intersection, LineIntersection};
 use geo::{Contains, HaversineDistance, Intersects, Point, Rect};
 use petgraph::graph::NodeIndex;
 use petgraph::Direction;
@@ -40,8 +41,18 @@ pub fn is_road_way(way: &OsmWay) -> bool {
     way.tags.get("highway").is_some_and(|h| {
         matches!(
             h.as_str(),
-            "primary" | "secondary" | "tertiary" | "unclassified" | "residential" | "trunk" | "motorway" |
-            "primary_link" | "secondary_link" | "tertiary_link" | "trunk_link" | "motorway_link"
+            "primary"
+                | "secondary"
+                | "tertiary"
+                | "unclassified"
+                | "residential"
+                | "trunk"
+                | "motorway"
+                | "primary_link"
+                | "secondary_link"
+                | "tertiary_link"
+                | "trunk_link"
+                | "motorway_link"
         )
     })
 }
@@ -121,8 +132,16 @@ pub fn find_logical_intersections(
                 let query_point = Point::new(node.lon, node.lat);
                 let buffer_degrees = max_cluster_distance / 111_320.0;
                 let search_envelope = AABB::from_corners(
-                    (query_point.x() - buffer_degrees, query_point.y() - buffer_degrees).into(),
-                    (query_point.x() + buffer_degrees, query_point.y() + buffer_degrees).into(),
+                    (
+                        query_point.x() - buffer_degrees,
+                        query_point.y() - buffer_degrees,
+                    )
+                        .into(),
+                    (
+                        query_point.x() + buffer_degrees,
+                        query_point.y() + buffer_degrees,
+                    )
+                        .into(),
                 );
 
                 for candidate in rtree.locate_in_envelope_intersecting(&search_envelope) {
@@ -156,14 +175,48 @@ pub struct GeometricIntersection {
     pub degree: usize,
 }
 
+/// Find actual intersection points between two linestrings using geo crate algorithms.
+fn find_linestring_intersections(
+    linestring1: &geo::LineString,
+    linestring2: &geo::LineString,
+) -> Vec<geo::Point> {
+    let mut intersections = Vec::new();
+
+    // Check intersection between all line segments
+    for line1 in linestring1.lines() {
+        for line2 in linestring2.lines() {
+            if let Some(intersection) = line_intersection(line1, line2) {
+                match intersection {
+                    LineIntersection::SinglePoint { intersection, .. } => {
+                        intersections.push(geo::Point::from(intersection));
+                    }
+                    LineIntersection::Collinear { intersection } => {
+                        // For collinear segments, use the start point of the intersection
+                        intersections.push(geo::Point::from(intersection.start_point()));
+                    }
+                }
+            }
+        }
+    }
+
+    intersections
+}
+
 /// Find geometric intersections where ways cross but nodes aren't split.
 pub fn find_geometric_intersections(
     data: &OsmData,
     bbox: Option<Rect>,
 ) -> Vec<GeometricIntersection> {
-    let road_ways: Vec<WayWithLineString> = data.ways.values()
+    let road_ways: Vec<WayWithLineString> = data
+        .ways
+        .values()
         .filter(|way| is_road_way(way))
-        .filter_map(|way| way_to_linestring(way, data).map(|l| WayWithLineString { way: way.clone(), linestring: l }))
+        .filter_map(|way| {
+            way_to_linestring(way, data).map(|l| WayWithLineString {
+                way: way.clone(),
+                linestring: l,
+            })
+        })
         .filter(|wwl| bbox.map_or(true, |b| wwl.linestring.intersects(&b)))
         .collect();
 
@@ -174,17 +227,27 @@ pub fn find_geometric_intersections(
     for wwl1 in rtree.iter() {
         let search_envelope = wwl1.linestring.envelope();
         for wwl2 in rtree.locate_in_envelope_intersecting(&search_envelope) {
-            let pair = if wwl1.way.id < wwl2.way.id { (wwl1.way.id, wwl2.way.id) } else { (wwl2.way.id, wwl1.way.id) };
-            if processed_pairs.contains(&pair) { continue; }
+            let pair = if wwl1.way.id < wwl2.way.id {
+                (wwl1.way.id, wwl2.way.id)
+            } else {
+                (wwl2.way.id, wwl1.way.id)
+            };
+            if processed_pairs.contains(&pair) {
+                continue;
+            }
             processed_pairs.insert(pair);
 
-            if wwl1.way.nodes.iter().any(|n| wwl2.way.nodes.contains(n)) { continue; }
+            if wwl1.way.nodes.iter().any(|n| wwl2.way.nodes.contains(n)) {
+                continue;
+            }
 
             if wwl1.linestring.intersects(&wwl2.linestring) {
-                // A simple approximation for intersection point
-                if let Some(p1) = wwl1.linestring.points().next() {
-                     intersections.push(GeometricIntersection {
-                        point: p1,
+                // Find actual intersection points between the linestrings
+                let intersection_points =
+                    find_linestring_intersections(&wwl1.linestring, &wwl2.linestring);
+                for point in intersection_points {
+                    intersections.push(GeometricIntersection {
+                        point,
                         intersecting_ways: vec![wwl1.way.id, wwl2.way.id],
                         degree: 2,
                     });
@@ -202,9 +265,23 @@ pub fn extract_intersection_metadata(
     node_to_ways: &HashMap<i64, Vec<i64>>,
 ) -> HashMap<String, String> {
     let mut metadata = HashMap::new();
-    metadata.insert("representative_node".into(), logical_intersection.representative_node.to_string());
-    metadata.insert("cluster_size".into(), logical_intersection.node_cluster.len().to_string());
-    metadata.insert("node_cluster".into(), logical_intersection.node_cluster.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","));
+    metadata.insert(
+        "representative_node".into(),
+        logical_intersection.representative_node.to_string(),
+    );
+    metadata.insert(
+        "cluster_size".into(),
+        logical_intersection.node_cluster.len().to_string(),
+    );
+    metadata.insert(
+        "node_cluster".into(),
+        logical_intersection
+            .node_cluster
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
 
     if let Some(node) = data.nodes.get(&logical_intersection.representative_node) {
         metadata.insert("coordinates".into(), format!("{},{}", node.lat, node.lon));
@@ -219,11 +296,23 @@ pub fn extract_intersection_metadata(
         }
     }
 
-    let ways: Vec<_> = connected_ways.iter().filter_map(|id| data.ways.get(id)).collect();
+    let ways: Vec<_> = connected_ways
+        .iter()
+        .filter_map(|id| data.ways.get(id))
+        .collect();
     metadata.insert("degree".into(), ways.len().to_string());
-    metadata.insert("connected_ways".into(), ways.iter().map(|w| w.id.to_string()).collect::<Vec<_>>().join(","));
+    metadata.insert(
+        "connected_ways".into(),
+        ways.iter()
+            .map(|w| w.id.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
 
-    let highway_types: Vec<_> = ways.iter().filter_map(|w| w.tags.get("highway").cloned()).collect();
+    let highway_types: Vec<_> = ways
+        .iter()
+        .filter_map(|w| w.tags.get("highway").cloned())
+        .collect();
     metadata.insert("highway_types".into(), highway_types.join(","));
 
     // ... other metadata extraction
@@ -248,7 +337,9 @@ pub fn find_complex_intersections_graph(
         let degree = connected_ways.len();
 
         let has_roundabout = connected_ways.iter().any(|way_id| {
-            data.ways.get(way_id).map_or(false, |w| w.tags.get("junction") == Some(&"roundabout".to_string()))
+            data.ways.get(way_id).map_or(false, |w| {
+                w.tags.get("junction") == Some(&"roundabout".to_string())
+            })
         });
 
         if degree >= 4 || has_roundabout {
@@ -257,4 +348,3 @@ pub fn find_complex_intersections_graph(
     }
     complex_intersections
 }
-

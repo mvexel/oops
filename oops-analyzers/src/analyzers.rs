@@ -149,8 +149,8 @@ impl ProblemDetector for SidewalkCoverageDetector {
             return Vec::new();
         };
 
-        // Get the parallel sidewalks from the context
-        let parallel_sidewalks: Vec<_> = context
+        // Get the parallel sidewalks from the context with proper filtering
+        let all_nearby_sidewalks: Vec<_> = context
             .spatial_context
             .nearby_ways
             .iter()
@@ -165,11 +165,31 @@ impl ProblemDetector for SidewalkCoverageDetector {
             })
             .collect();
 
+        // Apply proper parallel filtering that excludes perpendicular crossings
+        let Some(target_linestring) = oops_core::spatial::way_to_linestring(target_way, data)
+        else {
+            return Vec::new();
+        };
+
+        let parallel_sidewalks: Vec<_> = all_nearby_sidewalks
+            .into_iter()
+            .filter(|candidate| {
+                // Exclude ways that cross geometrically (perpendicular crossings)
+                !oops_core::spatial::ways_cross_geometrically(target_way, &candidate.way, data) &&
+                // Then check parallelism with enhanced projection-based algorithm
+                oops_core::spatial::are_ways_parallel(&target_linestring, &candidate.linestring, 30.0)
+            })
+            .collect();
+
         // Create references for the function call
         let parallel_sidewalk_refs: Vec<_> = parallel_sidewalks.iter().collect();
 
         // Get the highway-specific distance threshold
-        let highway_type = target_way.tags.get("highway").map(|s| s.as_str()).unwrap_or("unknown");
+        let highway_type = target_way
+            .tags
+            .get("highway")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
         let distance_threshold = match highway_type {
             "residential" | "unclassified" => 20.0,
             "tertiary" => 25.0,
@@ -390,39 +410,41 @@ pub fn build_pedestrian_completeness_analyzer() -> Analyzer {
                 ])
                 .exclude_with_tag("sidewalk"),
         ),
-        // GENERIC component from core with sidewalk-specific filter  
-        Box::new(oops_core::analysis::SpatialContext::with_highway_thresholds(|tags| {
-            // Expanded pedestrian infrastructure detection logic
-            let highway = tags.get("highway").map(|s| s.as_str());
-            let footway = tags.get("footway").map(|s| s.as_str());
-            let foot = tags.get("foot").map(|s| s.as_str());
-            let bicycle = tags.get("bicycle").map(|s| s.as_str());
-            
-            match highway {
-                // Traditional sidewalks and crossings
-                Some("footway") => {
-                    footway == Some("sidewalk") ||  // explicit sidewalks
+        // GENERIC component from core with sidewalk-specific filter
+        Box::new(
+            oops_core::analysis::SpatialContext::with_highway_thresholds(|tags| {
+                // Expanded pedestrian infrastructure detection logic
+                let highway = tags.get("highway").map(|s| s.as_str());
+                let footway = tags.get("footway").map(|s| s.as_str());
+                let foot = tags.get("foot").map(|s| s.as_str());
+                let bicycle = tags.get("bicycle").map(|s| s.as_str());
+
+                match highway {
+                    // Traditional sidewalks and crossings
+                    Some("footway") => {
+                        footway == Some("sidewalk") ||  // explicit sidewalks
                     footway == Some("crossing") ||  // pedestrian crossings
-                    footway.is_none()               // generic footways (likely sidewalks)
+                    footway.is_none() // generic footways (likely sidewalks)
+                    }
+
+                    // Paths - both sidewalks and mixed-use
+                    Some("path") => {
+                        footway == Some("sidewalk") ||  // explicit sidewalks
+                    (bicycle == Some("designated") && foot != Some("no")) // mixed-use unless foot=no
+                    }
+
+                    // Cycleways that allow pedestrians
+                    Some("cycleway") => {
+                        foot == Some("yes")
+                            || foot == Some("designated")
+                            || foot == Some("permissive")
+                            || foot.is_none() // Default assumption: cycleways usually allow pedestrians
+                    }
+
+                    _ => false,
                 }
-                
-                // Paths - both sidewalks and mixed-use
-                Some("path") => {
-                    footway == Some("sidewalk") ||  // explicit sidewalks
-                    (bicycle == Some("designated") && foot != Some("no"))  // mixed-use unless foot=no
-                }
-                
-                // Cycleways that allow pedestrians
-                Some("cycleway") => {
-                    foot == Some("yes") || 
-                    foot == Some("designated") ||
-                    foot == Some("permissive") ||
-                    foot.is_none()  // Default assumption: cycleways usually allow pedestrians
-                }
-                
-                _ => false
-            }
-        })),
+            }),
+        ),
         // ANALYZER-SPECIFIC component (lives here, not in core!)
         Box::new(SidewalkCoverageDetector::new(0.5)), // Use legacy default (50% coverage)
     )

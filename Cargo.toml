@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-geo = "0.28"
+geo = "0.31"
 rstar = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "1.0"
