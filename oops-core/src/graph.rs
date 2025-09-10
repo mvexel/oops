@@ -6,7 +6,7 @@
 use crate::data::{OsmData, OsmWay};
 use crate::intersections::is_road_way;
 use crate::spatial::way_to_linestring;
-use geo::GeodesicLength;
+use geo::{Geodesic, Length};
 use petgraph::graph::{Graph, NodeIndex};
 use std::collections::HashMap;
 
@@ -107,7 +107,7 @@ fn add_edge_from_path(
         }
 
         if let Some(geometry) = way_to_linestring(way, data) {
-            let length_meters = geometry.geodesic_length();
+            let length_meters = Geodesic.length(&geometry);
 
             let segment = RoadSegment {
                 osm_way_id: way.id,
@@ -120,7 +120,10 @@ fn add_edge_from_path(
             let oneway = way.tags.get("oneway").map(|s| s.as_str());
             let is_roundabout = way.tags.get("junction").is_some_and(|j| j == "roundabout");
 
-            let forward = oneway == Some("yes") || oneway == Some("true") || oneway == Some("1") || is_roundabout;
+            let forward = oneway == Some("yes")
+                || oneway == Some("true")
+                || oneway == Some("1")
+                || is_roundabout;
             let backward = oneway == Some("-1");
 
             if !backward {
@@ -145,4 +148,3 @@ pub fn build_node_to_ways_index(data: &OsmData) -> HashMap<i64, Vec<i64>> {
     }
     node_to_ways
 }
-

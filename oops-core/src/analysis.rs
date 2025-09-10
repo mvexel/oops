@@ -44,7 +44,6 @@ pub struct Finding {
     pub category: ProblemCategory,
     pub severity: Severity,
     pub message: Option<String>,
-    pub recommendation: Option<String>,
     pub context: HashMap<String, String>,
 }
 
@@ -179,7 +178,7 @@ impl ElementSelector for WaySelector {
                 // Highway type check
                 if !self.highway_types.is_empty() {
                     match way.tags.get("highway") {
-                        Some(highway) if self.highway_types.contains(highway) => {},
+                        Some(highway) if self.highway_types.contains(highway) => {}
                         _ => return false,
                     }
                 }
@@ -202,11 +201,11 @@ impl ElementSelector for WaySelector {
                         false
                     }
                 });
-                
+
                 if !has_nodes_in_area {
                     return None;
                 }
-                
+
                 // Check if way extends beyond PBF boundary - if so, exclude it
                 if let Some(boundary) = &data.boundary {
                     let all_nodes_within_boundary = way.nodes.iter().all(|&node_id| {
@@ -216,21 +215,20 @@ impl ElementSelector for WaySelector {
                             false // Missing node - exclude way
                         }
                     });
-                    
+
                     if !all_nodes_within_boundary {
                         return None; // Exclude way that extends beyond boundary
                     }
                 }
-                
+
                 Some(way.clone())
             })
             .filter_map(|way| {
                 // Convert to SelectedElement
-                let nodes: Vec<(f64, f64)> = way.nodes
+                let nodes: Vec<(f64, f64)> = way
+                    .nodes
                     .iter()
-                    .filter_map(|&node_id| {
-                        data.get_node(node_id).map(|node| (node.lon, node.lat))
-                    })
+                    .filter_map(|&node_id| data.get_node(node_id).map(|node| (node.lon, node.lat)))
                     .collect();
 
                 if nodes.is_empty() {
@@ -254,17 +252,24 @@ pub struct IntersectionSelector;
 impl ElementSelector for IntersectionSelector {
     fn select_elements(&self, data: &OsmData, query: &AnalysisQuery) -> Vec<SelectedElement> {
         use geo::Rect;
-        
+
         // Convert AnalysisQuery area to geo::Rect for bbox operations
         let _bbox = Some(Rect::new(
-            geo::Coord { x: query.area.min_lon, y: query.area.min_lat },
-            geo::Coord { x: query.area.max_lon, y: query.area.max_lat }
+            geo::Coord {
+                x: query.area.min_lon,
+                y: query.area.min_lat,
+            },
+            geo::Coord {
+                x: query.area.max_lon,
+                y: query.area.max_lat,
+            },
         ));
-        
+
         let mut selected_elements = Vec::new();
-        
+
         // Get traditional topological intersections
-        let topo_intersections: Vec<_> = data.nodes
+        let topo_intersections: Vec<_> = data
+            .nodes
             .values()
             .filter(|node| query.area.contains_point(node.lon, node.lat))
             .filter(|node| {
@@ -286,12 +291,12 @@ impl ElementSelector for IntersectionSelector {
                 },
             })
             .collect();
-        
+
         selected_elements.extend(topo_intersections);
-        
+
         // Note: Geometric intersections will be handled by the context provider for efficiency
         // The SpatialIndex has access to optimized intersection detection methods
-        
+
         selected_elements
     }
 }
@@ -331,14 +336,22 @@ pub struct NearbyWay {
 
 /// Enriches selected elements with contextual information
 pub trait ContextProvider: Send + Sync {
-    fn enrich_context(&self, element: &SelectedElement, spatial_index: &AnalysisSpatialIndex) -> EnrichedContext;
+    fn enrich_context(
+        &self,
+        element: &SelectedElement,
+        spatial_index: &AnalysisSpatialIndex,
+    ) -> EnrichedContext;
 }
 
 /// No-op context provider for simple analyzers
 pub struct NoContext;
 
 impl ContextProvider for NoContext {
-    fn enrich_context(&self, element: &SelectedElement, _spatial_index: &AnalysisSpatialIndex) -> EnrichedContext {
+    fn enrich_context(
+        &self,
+        element: &SelectedElement,
+        _spatial_index: &AnalysisSpatialIndex,
+    ) -> EnrichedContext {
         EnrichedContext {
             element: element.clone(),
             spatial_context: SpatialContextData::default(),
@@ -356,8 +369,8 @@ pub struct SpatialContext {
 }
 
 impl SpatialContext {
-    pub fn new<F>(max_distance: f64, max_angle_diff: f64, way_filter: F) -> Self 
-    where 
+    pub fn new<F>(max_distance: f64, max_angle_diff: f64, way_filter: F) -> Self
+    where
         F: Fn(&HashMap<String, String>) -> bool + Send + Sync + 'static,
     {
         Self {
@@ -369,7 +382,7 @@ impl SpatialContext {
     }
 
     /// Create with highway-specific distance thresholds and custom filter
-    pub fn with_highway_thresholds<F>(way_filter: F) -> Self 
+    pub fn with_highway_thresholds<F>(way_filter: F) -> Self
     where
         F: Fn(&HashMap<String, String>) -> bool + Send + Sync + 'static,
     {
@@ -381,7 +394,7 @@ impl SpatialContext {
         highway_map.insert("primary".to_string(), 35.0);
 
         Self {
-            max_distance: 35.0, // Maximum of all thresholds
+            max_distance: 35.0,   // Maximum of all thresholds
             max_angle_diff: 30.0, // Legacy default
             highway_distance_map: highway_map,
             way_filter: Box::new(way_filter),
@@ -398,22 +411,28 @@ impl SpatialContext {
 }
 
 impl ContextProvider for SpatialContext {
-    fn enrich_context(&self, element: &SelectedElement, spatial_index: &AnalysisSpatialIndex) -> EnrichedContext {
+    fn enrich_context(
+        &self,
+        element: &SelectedElement,
+        spatial_index: &AnalysisSpatialIndex,
+    ) -> EnrichedContext {
         // Get highway-specific distance threshold
-        let highway_type = element.tags.get("highway").map(|s| s.as_str()).unwrap_or("unknown");
+        let highway_type = element
+            .tags
+            .get("highway")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
         let distance_threshold = self.get_distance_for_highway(highway_type);
 
         let nearby_ways = spatial_index.find_nearby_ways_by_tags(
             element,
             distance_threshold,
-            &*self.way_filter  // Use the configurable filter instead of hard-coded logic
+            &*self.way_filter, // Use the configurable filter instead of hard-coded logic
         );
 
         EnrichedContext {
             element: element.clone(),
-            spatial_context: SpatialContextData {
-                nearby_ways,
-            },
+            spatial_context: SpatialContextData { nearby_ways },
             metadata: HashMap::new(),
         }
     }
@@ -433,7 +452,6 @@ pub struct MissingTagDetector {
     required_tag: String,
     severity: Severity,
     message_template: String,
-    recommendation_template: String,
 }
 
 impl MissingTagDetector {
@@ -442,7 +460,6 @@ impl MissingTagDetector {
             required_tag: tag.to_string(),
             severity: Severity::Medium,
             message_template: "Element is missing the '{}' tag".to_string(),
-            recommendation_template: "Add the '{}' tag with an appropriate value".to_string(),
         }
     }
 
@@ -455,11 +472,6 @@ impl MissingTagDetector {
         self.message_template = template.to_string();
         self
     }
-
-    pub fn with_recommendation_template(mut self, template: &str) -> Self {
-        self.recommendation_template = template.to_string();
-        self
-    }
 }
 
 impl ProblemDetector for MissingTagDetector {
@@ -470,7 +482,10 @@ impl ProblemDetector for MissingTagDetector {
         }
 
         let mut finding_context = HashMap::new();
-        finding_context.insert("element_id".to_string(), context.element.element_id.to_string());
+        finding_context.insert(
+            "element_id".to_string(),
+            context.element.element_id.to_string(),
+        );
         finding_context.insert("missing_tag".to_string(), self.required_tag.clone());
 
         // Add existing tags to context
@@ -479,13 +494,11 @@ impl ProblemDetector for MissingTagDetector {
         }
 
         let message = self.message_template.replace("{}", &self.required_tag);
-        let recommendation = self.recommendation_template.replace("{}", &self.required_tag);
 
         vec![Finding {
             category: ProblemCategory::Missing,
             severity: self.severity,
             message: Some(message),
-            recommendation: Some(recommendation),
             context: finding_context,
         }]
     }
@@ -520,19 +533,29 @@ impl AnalysisSpatialIndex {
     pub fn osm_data(&self) -> &OsmData {
         &self.osm_data
     }
-    
+
     /// Access to high-performance spatial index
     pub fn spatial_index(&self) -> &crate::spatial_index::SpatialIndex {
         &self.spatial_index
     }
 
     /// Find potential intersection candidates using spatial index - O(log n)
-    pub fn find_intersecting_way_candidates(&self, way: &crate::OsmWay, max_distance: f64) -> Vec<i64> {
-        self.spatial_index.find_intersecting_ways(way, &self.osm_data, max_distance)
+    pub fn find_intersecting_way_candidates(
+        &self,
+        way: &crate::OsmWay,
+        max_distance: f64,
+    ) -> Vec<i64> {
+        self.spatial_index
+            .find_intersecting_ways(way, &self.osm_data, max_distance)
     }
 
     /// Find nearby ways using generic tag-based filter - O(log n) instead of O(n)  
-    pub fn find_nearby_ways_by_tags<F>(&self, element: &SelectedElement, max_distance: f64, tag_filter: F) -> Vec<NearbyWay>
+    pub fn find_nearby_ways_by_tags<F>(
+        &self,
+        element: &SelectedElement,
+        max_distance: f64,
+        tag_filter: F,
+    ) -> Vec<NearbyWay>
     where
         F: Fn(&std::collections::HashMap<String, String>) -> bool,
     {
@@ -540,26 +563,39 @@ impl AnalysisSpatialIndex {
         let Some(target_way) = self.osm_data.ways.get(&element.element_id) else {
             return Vec::new();
         };
-        
+
         // Use high-performance spatial index for O(log n) query
-        let nearby_ways = self.spatial_index.find_nearby_ways_by_tags(target_way, &self.osm_data, max_distance, tag_filter);
-        
+        let nearby_ways = self.spatial_index.find_nearby_ways_by_tags(
+            target_way,
+            &self.osm_data,
+            max_distance,
+            tag_filter,
+        );
+
         // Convert to NearbyWay format
-        nearby_ways.into_iter().map(|way_with_linestring| {
-            let way = &way_with_linestring.way;
-            let distance = if let Some(target_geometry) = crate::spatial::way_to_linestring(target_way, &self.osm_data) {
-                calculate_linestring_to_linestring_distance(&target_geometry, &way_with_linestring.linestring)
-            } else {
-                0.0
-            };
-            
-            NearbyWay {
-                way_id: way.id,
-                distance,
-                tags: way.tags.clone(),
-                angle_difference: Some(0.0), // Could calculate if needed
-            }
-        }).collect()
+        nearby_ways
+            .into_iter()
+            .map(|way_with_linestring| {
+                let way = &way_with_linestring.way;
+                let distance = if let Some(target_geometry) =
+                    crate::spatial::way_to_linestring(target_way, &self.osm_data)
+                {
+                    calculate_linestring_to_linestring_distance(
+                        &target_geometry,
+                        &way_with_linestring.linestring,
+                    )
+                } else {
+                    0.0
+                };
+
+                NearbyWay {
+                    way_id: way.id,
+                    distance,
+                    tags: way.tags.clone(),
+                    angle_difference: Some(0.0), // Could calculate if needed
+                }
+            })
+            .collect()
     }
 }
 
@@ -580,27 +616,35 @@ impl AnalysisEngine {
     }
 
     /// Run multiple analyzers in parallel on the same dataset
-    pub fn analyze(&mut self, analyzers: &[Analyzer], query: &AnalysisQuery, data: &OsmData) -> Vec<AnalysisResult> {
+    pub fn analyze(
+        &mut self,
+        analyzers: &[Analyzer],
+        query: &AnalysisQuery,
+        data: &OsmData,
+    ) -> Vec<AnalysisResult> {
         use rayon::prelude::*;
-        
+
         // Build shared spatial index once for all analyzers
         if self.spatial_index.is_none() {
             self.spatial_index = Some(AnalysisSpatialIndex::build(data));
         }
 
         let spatial_index = self.spatial_index.as_ref().unwrap();
-        
+
         // Run analyzers in parallel for massive speedup
         analyzers
             .par_iter()
-            .flat_map(|analyzer| {
-                self.run_analyzer(analyzer, query, spatial_index)
-            })
+            .flat_map(|analyzer| self.run_analyzer(analyzer, query, spatial_index))
             .collect()
     }
 
     /// Run a single analyzer with full optimization
-    pub fn analyze_single(&mut self, analyzer: &Analyzer, query: &AnalysisQuery, data: &OsmData) -> Vec<AnalysisResult> {
+    pub fn analyze_single(
+        &mut self,
+        analyzer: &Analyzer,
+        query: &AnalysisQuery,
+        data: &OsmData,
+    ) -> Vec<AnalysisResult> {
         if self.spatial_index.is_none() {
             self.spatial_index = Some(AnalysisSpatialIndex::build(data));
         }
@@ -609,11 +653,18 @@ impl AnalysisEngine {
         self.run_analyzer(analyzer, query, spatial_index)
     }
 
-    fn run_analyzer(&self, analyzer: &Analyzer, query: &AnalysisQuery, spatial_index: &AnalysisSpatialIndex) -> Vec<AnalysisResult> {
+    fn run_analyzer(
+        &self,
+        analyzer: &Analyzer,
+        query: &AnalysisQuery,
+        spatial_index: &AnalysisSpatialIndex,
+    ) -> Vec<AnalysisResult> {
         use rayon::prelude::*;
-        
+
         // Step 1: Select elements
-        let selected_elements = analyzer.selector.select_elements(spatial_index.osm_data(), query);
+        let selected_elements = analyzer
+            .selector
+            .select_elements(spatial_index.osm_data(), query);
         let data = spatial_index.osm_data();
 
         // Step 2: Process elements in parallel
@@ -621,14 +672,17 @@ impl AnalysisEngine {
             .par_iter()
             .filter_map(|element| {
                 // Step 3: Enrich with context
-                let context = analyzer.context_provider.enrich_context(element, spatial_index);
+                let context = analyzer
+                    .context_provider
+                    .enrich_context(element, spatial_index);
 
                 // Step 4: Detect problems
                 let findings = analyzer.detector.detect_problems(&context, data);
 
                 // Step 5: Create result if there are findings
                 if !findings.is_empty() {
-                    let mut result = AnalysisResult::new(element.element_id, element.element_type.clone());
+                    let mut result =
+                        AnalysisResult::new(element.element_id, element.element_type.clone());
                     for finding in findings {
                         result.add_finding(finding);
                     }
@@ -652,10 +706,12 @@ impl AnalysisEngine {
         }
         self.spatial_index = None;
     }
-    
+
     /// Get performance statistics
     pub fn get_stats(&self) -> Option<crate::spatial_index::SpatialIndexStats> {
-        self.spatial_index.as_ref().map(|si| si.spatial_index().stats())
+        self.spatial_index
+            .as_ref()
+            .map(|si| si.spatial_index().stats())
     }
 }
 
@@ -763,7 +819,7 @@ impl AnalyzerRegistry {
             Some(analyzer) => {
                 let mut engine = AnalysisEngine::new();
                 Ok(engine.analyze_single(analyzer, query, data))
-            },
+            }
             None => Err(format!(
                 "Analyzer '{}' not found. Available: {}",
                 analyzer_name,
@@ -796,11 +852,12 @@ impl AnalyzerRegistry {
 
     /// Get all analyzer metadata
     pub fn get_all_info(&self) -> Vec<AnalyzerInfo> {
-        self.analyzers.values().map(|analyzer| analyzer.info()).collect()
+        self.analyzers
+            .values()
+            .map(|analyzer| analyzer.info())
+            .collect()
     }
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalyzerInfo {

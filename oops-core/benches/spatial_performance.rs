@@ -1,6 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oops_core::*;
-use std::collections::HashMap;
 
 /// Generate synthetic OSM data for performance testing
 fn generate_test_data(way_count: usize, node_count: usize) -> OsmData {

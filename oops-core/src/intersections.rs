@@ -7,7 +7,7 @@ use crate::data::{OsmData, OsmWay};
 use crate::graph::RoadGraph;
 use crate::spatial::{way_to_linestring, WayWithLineString};
 use geo::line_intersection::{line_intersection, LineIntersection};
-use geo::{Contains, HaversineDistance, Intersects, Point, Rect};
+use geo::{Contains, Distance, Haversine, Intersects, Point, Rect};
 use petgraph::graph::NodeIndex;
 use petgraph::Direction;
 use rstar::{RTree, RTreeObject, AABB};
@@ -146,7 +146,7 @@ pub fn find_logical_intersections(
 
                 for candidate in rtree.locate_in_envelope_intersecting(&search_envelope) {
                     if !used_nodes.contains(&candidate.node_id)
-                        && query_point.haversine_distance(&candidate.point) <= max_cluster_distance
+                        && Haversine.distance(query_point, candidate.point) <= max_cluster_distance
                     {
                         used_nodes.insert(candidate.node_id);
                         queue.push(candidate.node_id);

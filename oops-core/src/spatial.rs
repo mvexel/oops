@@ -4,14 +4,13 @@
 //! and spatial relationship checks (e.g., parallel ways, sidewalk coverage).
 
 use crate::data::{OsmData, OsmWay};
-use geo::algorithm::frechet_distance::FrechetDistance;
 use geo::algorithm::relate::Relate;
 use geo::algorithm::validation::Validation;
 use geo::line_intersection::{line_intersection, LineIntersection};
 use geo::{
-    algorithm::{closest_point::ClosestPoint, euclidean_length::EuclideanLength},
-    Bearing, Closest, Coord, CoordsIter, Distance, Euclidean, GeodesicLength, Haversine,
-    HaversineBearing, HaversineDistance, Length, Line, LineInterpolatePoint, LineString, Point,
+    algorithm::closest_point::ClosestPoint, line_measures::FrechetDistance, Bearing, Closest,
+    Coord, CoordsIter, Distance, Euclidean, Geodesic, Haversine, InterpolatableLine, Length, Line,
+    LineString, Point,
 };
 use rstar::{RTree, RTreeObject, AABB};
 
@@ -147,7 +146,11 @@ fn project_and_compare(shorter: &LineString, longer: &LineString) -> Option<f64>
 /// Checks if two ways have parallel segments using projection-based analysis.
 /// This approach correctly rejects perpendicular crossings by projecting the shorter
 /// linestring onto the longer one and comparing bearings of the original vs projected segments.
-pub fn are_ways_parallel(way1: &LineString, way2: &LineString, max_angle_diff: f64) -> bool {
+pub fn are_ways_geometrically_parallel(
+    way1: &LineString,
+    way2: &LineString,
+    max_angle_diff: f64,
+) -> bool {
     if way1.0.is_empty() || way2.0.is_empty() {
         return false;
     }
@@ -172,7 +175,7 @@ pub fn are_ways_parallel(way1: &LineString, way2: &LineString, max_angle_diff: f
     // Try projecting shorter onto longer
     if let Some(angle_diff) = project_and_compare(shorter, longer) {
         // Debug output for the problematic case
-        if (shorter.0.first()
+        if shorter.0.first()
             == Some(&geo::Coord {
                 x: -111.887135,
                 y: 40.764907,
@@ -181,7 +184,7 @@ pub fn are_ways_parallel(way1: &LineString, way2: &LineString, max_angle_diff: f
                 == Some(&geo::Coord {
                     x: -111.887135,
                     y: 40.764907,
-                }))
+                })
         {
             println!(
                 "PARALLEL DEBUG: shorter->longer angle_diff={:.1}°, threshold={:.1}°",
@@ -197,7 +200,7 @@ pub fn are_ways_parallel(way1: &LineString, way2: &LineString, max_angle_diff: f
     // Also try the reverse direction for robustness
     if let Some(angle_diff) = project_and_compare(longer, shorter) {
         // Debug output for the problematic case
-        if (shorter.0.first()
+        if shorter.0.first()
             == Some(&geo::Coord {
                 x: -111.887135,
                 y: 40.764907,
@@ -206,7 +209,7 @@ pub fn are_ways_parallel(way1: &LineString, way2: &LineString, max_angle_diff: f
                 == Some(&geo::Coord {
                     x: -111.887135,
                     y: 40.764907,
-                }))
+                })
         {
             println!(
                 "PARALLEL DEBUG: longer->shorter angle_diff={:.1}°, threshold={:.1}°",
@@ -222,22 +225,6 @@ pub fn are_ways_parallel(way1: &LineString, way2: &LineString, max_angle_diff: f
     false
 }
 
-/// Calculate enhanced bearing and length for each segment using geo::Line.
-fn calculate_enhanced_segment_bearings(lines: &[Line]) -> Vec<(f64, f64)> {
-    lines
-        .iter()
-        .filter_map(|line| {
-            if line.start_point() == line.end_point() {
-                None
-            } else {
-                let bearing = line.start_point().haversine_bearing(line.end_point());
-                let length = line.start_point().haversine_distance(&line.end_point());
-                Some((bearing, length))
-            }
-        })
-        .collect()
-}
-
 /// Normalize angle difference to smallest absolute value (0 to 180 degrees).
 fn normalize_angle_diff(angle_diff: f64) -> f64 {
     let mut diff = angle_diff.abs();
@@ -245,42 +232,6 @@ fn normalize_angle_diff(angle_diff: f64) -> f64 {
         diff = 360.0 - diff;
     }
     diff
-}
-
-/// Calculate bearing and length for each segment of a way.
-fn calculate_segment_bearings(points: &[geo::Point]) -> Vec<(f64, f64)> {
-    points
-        .windows(2)
-        .filter_map(|p| {
-            if p[0] == p[1] {
-                None
-            } else {
-                let bearing = p[0].haversine_bearing(p[1]);
-                let length = p[0].haversine_distance(&p[1]);
-                Some((bearing, length))
-            }
-        })
-        .collect()
-}
-
-/// Simple bearing comparison for short ways (fallback method).
-fn are_ways_parallel_simple(way1: &LineString, way2: &LineString, max_angle_diff: f64) -> bool {
-    let (Some(way1_start), Some(way1_end)) = (way1.points().next(), way1.points().last()) else {
-        return false;
-    };
-    let (Some(way2_start), Some(way2_end)) = (way2.points().next(), way2.points().last()) else {
-        return false;
-    };
-
-    if way1_start == way1_end || way2_start == way2_end {
-        return false;
-    }
-
-    let way1_bearing = way1_start.haversine_bearing(way1_end);
-    let way2_bearing = way2_start.haversine_bearing(way2_end);
-    let angle_diff = (way1_bearing - way2_bearing).abs();
-
-    angle_diff <= max_angle_diff || (angle_diff - 180.0).abs() <= max_angle_diff
 }
 
 /// Finds ways that are both spatially close and roughly parallel to a target way.
@@ -296,8 +247,11 @@ pub fn find_parallel_adjacent_ways<'a>(
             .into_iter()
             .filter(|candidate| {
                 let crosses = ways_cross_geometrically(target_way, &candidate.way, data);
-                let is_parallel =
-                    are_ways_parallel(&target_linestring, &candidate.linestring, max_angle_diff);
+                let is_parallel = are_ways_geometrically_parallel(
+                    &target_linestring,
+                    &candidate.linestring,
+                    max_angle_diff,
+                );
 
                 // Debug output for the problematic case
                 if target_way.id == 10128331 && candidate.way.id == 708994242 {
@@ -329,14 +283,16 @@ pub fn calculate_sidewalk_coverage(
             return 0.0;
         }
 
-        let sample_count = (target_linestring.geodesic_length() / 10.0)
+        let sample_count = (Geodesic.length(&target_linestring) / 10.0)
             .ceil()
             .max(10.0) as usize;
         let mut covered_samples = 0;
 
         for i in 0..sample_count {
             let t = i as f64 / (sample_count - 1) as f64;
-            let sample_point = target_linestring.line_interpolate_point(t).unwrap();
+            let sample_point = target_linestring
+                .point_at_ratio_from_start(&Euclidean, t)
+                .unwrap();
 
             let has_coverage = parallel_sidewalks.iter().any(|sidewalk| {
                 let min_dist =
@@ -360,14 +316,14 @@ pub fn calculate_point_to_linestring_distance(
     point: &geo::Point,
     linestring: &geo::LineString,
 ) -> f64 {
-    use geo::{ClosestPoint, HaversineDistance};
+    use geo::ClosestPoint;
 
     linestring
         .lines()
         .map(|line| {
             match line.closest_point(point) {
                 geo::Closest::SinglePoint(closest) | geo::Closest::Intersection(closest) => {
-                    point.haversine_distance(&closest)
+                    Haversine.distance(*point, closest)
                 }
                 geo::Closest::Indeterminate => {
                     // This should be extremely rare with geo crate's robust implementation
@@ -516,12 +472,12 @@ pub fn calculate_way_similarity(way1: &OsmWay, way2: &OsmWay, data: &OsmData) ->
     let linestring2 = way_to_linestring(way2, data)?;
 
     // Use geo crate's Fréchet distance for path similarity
-    Some(linestring1.frechet_distance(&linestring2))
+    Some(Euclidean.frechet_distance(&linestring1, &linestring2))
 }
 
 /// Enhanced parallel way detection using both bearing analysis and Fréchet distance.
 /// Combines geometric parallelism with path similarity for robust detection.
-pub fn are_ways_parallel_enhanced(
+pub fn are_ways_parallel(
     way1: &OsmWay,
     way2: &OsmWay,
     data: &OsmData,
@@ -536,12 +492,12 @@ pub fn are_ways_parallel_enhanced(
     };
 
     // Check geometric parallelism first (faster)
-    if !are_ways_parallel(&linestring1, &linestring2, max_angle_diff) {
+    if !are_ways_geometrically_parallel(&linestring1, &linestring2, max_angle_diff) {
         return false;
     }
 
     // Then check path similarity using Fréchet distance
-    let frechet_dist = linestring1.frechet_distance(&linestring2);
+    let frechet_dist = Euclidean.frechet_distance(&linestring1, &linestring2);
     frechet_dist <= max_frechet_distance
 }
 
@@ -660,7 +616,7 @@ pub fn analyze_way_quality(way: &OsmWay, data: &OsmData) -> Option<WayQualityRep
     Some(WayQualityReport {
         is_valid: validate_way_geometry(way, data),
         coordinate_count: coord_count,
-        length_meters: linestring.geodesic_length(),
+        length_meters: Geodesic.length(&linestring),
         has_duplicate_points: has_duplicates,
         has_self_intersection,
     })

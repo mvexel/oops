@@ -127,6 +127,40 @@ impl SidewalkCoverageDetector {
             context.insert("nearby_sidewalk_ids".to_string(), sidewalk_ids.join(","));
         }
     }
+
+    /// Evaluate sidewalk tags to determine coverage percentage
+    fn evaluate_sidewalk_tags(&self, tags: &std::collections::HashMap<String, String>) -> f64 {
+        // Check main sidewalk tag
+        if let Some(sidewalk_value) = tags.get("sidewalk") {
+            match sidewalk_value.as_str() {
+                "both" => return 1.0,
+                "left" | "right" => return 0.5,
+                "no" | "none" => return 0.0,
+                "separate" => {
+                    // For separate sidewalks, we should continue with spatial analysis
+                    return 0.0; // Let spatial analysis determine coverage
+                }
+                _ => {} // Unknown value, continue checking
+            }
+        }
+
+        // Check individual sidewalk:left/right tags
+        let left_coverage = match tags.get("sidewalk:left").map(|s| s.as_str()) {
+            Some("yes") => 0.5,
+            Some("no") | Some("none") => 0.0,
+            Some("separate") => 0.0, // Let spatial analysis handle
+            _ => 0.0,                // Unknown or missing
+        };
+
+        let right_coverage = match tags.get("sidewalk:right").map(|s| s.as_str()) {
+            Some("yes") => 0.5,
+            Some("no") | Some("none") => 0.0,
+            Some("separate") => 0.0, // Let spatial analysis handle
+            _ => 0.0,                // Unknown or missing
+        };
+
+        left_coverage + right_coverage
+    }
 }
 
 impl ProblemDetector for SidewalkCoverageDetector {
@@ -135,13 +169,18 @@ impl ProblemDetector for SidewalkCoverageDetector {
         context: &EnrichedContext,
         data: &oops_core::data::OsmData,
     ) -> Vec<Finding> {
-        // Only analyze roads that don't have sidewalk tags
+        // Check for sidewalk tags and evaluate them
         let has_sidewalk_tags = context.element.tags.contains_key("sidewalk")
             || context.element.tags.contains_key("sidewalk:left")
             || context.element.tags.contains_key("sidewalk:right");
 
         if has_sidewalk_tags {
-            return Vec::new();
+            // Evaluate sidewalk tags to determine coverage
+            let tag_coverage = self.evaluate_sidewalk_tags(&context.element.tags);
+            if tag_coverage >= self.min_coverage_ratio {
+                return Vec::new(); // Sufficient coverage from tags
+            }
+            // Continue with spatial analysis to supplement tag-based coverage
         }
 
         // The target way must exist in the data
@@ -177,7 +216,7 @@ impl ProblemDetector for SidewalkCoverageDetector {
                 // Exclude ways that cross geometrically (perpendicular crossings)
                 !oops_core::spatial::ways_cross_geometrically(target_way, &candidate.way, data) &&
                 // Then check parallelism with enhanced projection-based algorithm
-                oops_core::spatial::are_ways_parallel(&target_linestring, &candidate.linestring, 30.0)
+                oops_core::spatial::are_ways_geometrically_parallel(&target_linestring, &candidate.linestring, 30.0)
             })
             .collect();
 
@@ -257,35 +296,26 @@ impl ProblemDetector for SidewalkCoverageDetector {
             )
         };
 
-        let recommendation = if parallel_sidewalks.is_empty() {
-            "Add a sidewalk=* tag or map adjacent sidewalk ways".to_string()
-        } else {
-            "Extend existing sidewalk mapping or add sidewalk=* tags".to_string()
-        };
-
         vec![Finding {
             category: ProblemCategory::Missing,
             severity: Severity::Low,
             message: Some(message),
-            recommendation: Some(recommendation),
             context: finding_context,
         }]
     }
 }
 
 /// Highway-aware severity detector - ANALYZER-SPECIFIC logic
-pub struct HighwaySeverityDetector {
+pub struct MissingTagDetector {
     tag: String,
     message_template: String,
-    recommendation_template: String,
 }
 
-impl HighwaySeverityDetector {
+impl MissingTagDetector {
     pub fn new(tag: &str) -> Self {
         Self {
             tag: tag.to_string(),
             message_template: "Road is missing the '{}' tag".to_string(),
-            recommendation_template: "Add the '{}' tag with an appropriate value".to_string(),
         }
     }
 
@@ -316,7 +346,7 @@ impl HighwaySeverityDetector {
     }
 }
 
-impl ProblemDetector for HighwaySeverityDetector {
+impl ProblemDetector for MissingTagDetector {
     fn detect_problems(
         &self,
         context: &EnrichedContext,
@@ -353,7 +383,6 @@ impl ProblemDetector for HighwaySeverityDetector {
             message: Some(
                 self.create_detailed_message(highway_type, road_name.map(|s| s.as_str())),
             ),
-            recommendation: Some(self.recommendation_template.replace("{}", &self.tag)),
             context: finding_context,
         }]
     }
@@ -384,11 +413,9 @@ pub fn build_missing_maxspeed_analyzer() -> Analyzer {
         // GENERIC component from core
         Box::new(NoContext),
         // ANALYZER-SPECIFIC component (lives here, not in core!)
-        Box::new(
-            HighwaySeverityDetector::new("maxspeed").with_message_template(
-                "Road is missing maxspeed tag - this can cause routing inconsistencies",
-            ),
-        ),
+        Box::new(MissingTagDetector::new("maxspeed").with_message_template(
+            "Road is missing maxspeed tag - this can cause routing inconsistencies",
+        )),
     )
 }
 

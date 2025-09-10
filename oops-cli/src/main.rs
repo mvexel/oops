@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use geo::{GeodesicLength, LineInterpolatePoint};
+use geo::{Euclidean, Geodesic, InterpolatableLine, Length};
 use geojson::{Feature, FeatureCollection, GeoJson, Geometry, Value as GeoValue};
 use oops_analyzers::get_all_analyzers;
 use oops_core::{
@@ -318,12 +318,6 @@ fn output_results(
                                 properties.insert(
                                     "message".to_string(),
                                     serde_json::Value::String(message.clone()),
-                                );
-                            }
-                            if let Some(recommendation) = &finding.recommendation {
-                                properties.insert(
-                                    "recommendation".to_string(),
-                                    serde_json::Value::String(recommendation.clone()),
                                 );
                             }
 
@@ -676,12 +670,12 @@ fn debug_detailed_sample_coverage(
 ) {
     if let Some(target_linestring) = oops_core::spatial::way_to_linestring(target_way, data) {
         // Use same sampling logic as the main function
-        let sample_count = (target_linestring.geodesic_length() / 10.0)
+        let sample_count = (Geodesic.length(&target_linestring) / 10.0)
             .ceil()
             .max(10.0) as usize;
         eprintln!(
             "  Road length: {:.1}m, {} samples (every ~10m)",
-            target_linestring.geodesic_length(),
+            Geodesic.length(&target_linestring),
             sample_count
         );
 
@@ -689,7 +683,9 @@ fn debug_detailed_sample_coverage(
 
         for i in 0..sample_count {
             let t = i as f64 / (sample_count - 1) as f64;
-            let sample_point = target_linestring.line_interpolate_point(t).unwrap();
+            let sample_point = target_linestring
+                .point_at_ratio_from_start(&Euclidean, t)
+                .unwrap();
 
             // Find closest sidewalk and distance
             let mut closest_distance = f64::MAX;

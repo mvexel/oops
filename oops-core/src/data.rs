@@ -169,7 +169,7 @@ impl OsmData {
     }
 
     pub fn nodes_near_point(&self, lat: f64, lon: f64, radius_meters: f64) -> Vec<&OsmNode> {
-        use geo::HaversineDistance;
+        use geo::{Distance, Haversine};
 
         let query_point = Point::new(lon, lat);
 
@@ -184,7 +184,7 @@ impl OsmData {
         self.node_index
             .locate_in_envelope(&envelope)
             .filter(|node_idx| {
-                let distance = query_point.haversine_distance(&node_idx.point);
+                let distance = Haversine.distance(query_point, node_idx.point);
                 distance <= radius_meters
             })
             .map(|node_idx| &node_idx.node)

@@ -142,13 +142,11 @@ mod tests {
             category: ProblemCategory::Missing,
             severity: Severity::Medium,
             message: Some("Opening hours not specified".into()),
-            recommendation: Some("Add opening_hours tag".into()),
             context,
         };
 
         assert_eq!(finding.severity, Severity::Medium);
         assert_eq!(finding.category, ProblemCategory::Missing);
-        assert!(finding.recommendation.is_some());
         assert_eq!(
             finding.context.get("tag"),
             Some(&"amenity=restaurant".into())
@@ -163,7 +161,6 @@ mod tests {
             category: ProblemCategory::Invalid,
             severity: Severity::High,
             message: Some("Invalid highway type".into()),
-            recommendation: None,
             context: HashMap::new(),
         };
 
