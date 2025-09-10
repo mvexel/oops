@@ -3,10 +3,6 @@ name = "oops-cli"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "analyzer_demo"
-path = "src/bin/analyzer_demo.rs"
-
 [dependencies]
 oops-core = { path = "../oops-core" }
 oops-ingest = { path = "../oops-ingest" }

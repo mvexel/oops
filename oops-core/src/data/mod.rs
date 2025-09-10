@@ -3,6 +3,8 @@ use rstar::{RTree, RTreeObject, AABB};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub mod compact;
+
 pub type OsmId = i64;
 pub type Tags = HashMap<String, String>;
 
@@ -225,3 +227,5 @@ impl Clone for OsmData {
         cloned
     }
 }
+
+pub use compact::*;

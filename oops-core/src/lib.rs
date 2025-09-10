@@ -1,5 +1,4 @@
 pub mod analysis;
-pub mod compact_data;
 pub mod data;
 pub mod geometry_simd;
 pub mod graph;
@@ -9,7 +8,6 @@ pub mod spatial_index;
 pub mod streaming;
 
 pub use analysis::*;
-pub use compact_data::*;
 pub use data::*;
 pub use geometry_simd::*;
 pub use graph::*;
