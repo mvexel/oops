@@ -1,8 +1,4 @@
-//! SIMD-optimized geometric calculations for massive performance gains
-//!
-//! This module uses SIMD instructions to perform multiple geometric calculations
-//! in parallel, providing 2-8x speedup over scalar operations.
-
+//! SIMD-optimized geometric calculations
 use geo::{BoundingRect, Coord, LineString, Point};
 use wide::f64x4;
 

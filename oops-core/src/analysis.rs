@@ -1,13 +1,3 @@
-//! New Composable Analysis Architecture
-//!
-//! This completely replaces the monolithic Analyzer trait with composable pipeline components.
-//!
-//! ## Architecture
-//! - **ElementSelector**: Chooses which OSM elements to analyze
-//! - **ContextProvider**: Enriches elements with spatial/relational context
-//! - **ProblemDetector**: Performs the core analysis logic
-//! - **AnalysisEngine**: Orchestrates execution with shared spatial indexing
-
 use crate::data::{BoundingBox, OsmData, OsmId};
 use crate::intersections::is_road_way;
 use crate::spatial::calculate_linestring_to_linestring_distance;

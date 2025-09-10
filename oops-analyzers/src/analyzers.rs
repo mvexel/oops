@@ -1,9 +1,3 @@
-//! Analyzers built with the new composable architecture
-//!
-//! This demonstrates the proper separation of concerns:
-//! - Core provides GENERIC components (WaySelector, MissingTagDetector)
-//! - Analyzers provide SPECIFIC logic (SidewalkCoverageDetector, HighwaySeverityDetector)
-
 use geo::Point;
 use oops_core::analysis::*;
 use oops_core::graph::build_node_to_ways_index;
