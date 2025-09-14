@@ -53,6 +53,10 @@ enum Commands {
         /// Enable validation mode (compare against ground truth tags)
         #[arg(long)]
         validate: bool,
+
+        /// Distance for clustering intersections (meters)
+        #[arg(long, default_value = "50.0")]
+        cluster_distance: f64,
     },
     /// List available analyzers
     List,
@@ -80,6 +84,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             _verbose,
             debug_element,
             validate,
+            cluster_distance,
         } => {
             analyze_command(
                 file,
@@ -90,6 +95,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 _verbose,
                 debug_element,
                 validate,
+                cluster_distance,
             )
             .await?;
         }
@@ -102,19 +108,19 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Create a new analyzer registry and populate it with all available analyzers.
-fn create_and_populate_registry() -> AnalyzerRegistry {
+fn create_and_populate_registry(cluster_distance: f64) -> AnalyzerRegistry {
     let mut registry = AnalyzerRegistry::new();
-    for analyzer in get_all_analyzers() {
+    for analyzer in get_all_analyzers(cluster_distance) {
         registry.register(analyzer);
     }
     registry
 }
 
 /// Create a new analyzer registry in validation mode
-fn create_validation_registry() -> AnalyzerRegistry {
+fn create_validation_registry(cluster_distance: f64) -> AnalyzerRegistry {
     // For now, just return the same as normal mode
     // TODO: Implement validation-specific analyzers when needed
-    create_and_populate_registry()
+    create_and_populate_registry(cluster_distance)
 }
 
 async fn analyze_command(
@@ -126,6 +132,7 @@ async fn analyze_command(
     _verbose: bool,
     debug_element: Option<i64>,
     validate: bool,
+    cluster_distance: f64,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Parse bounding box if provided
     let query_bbox = if let Some(bbox_str) = bbox {
@@ -160,14 +167,14 @@ async fn analyze_command(
     // Debug specific element if requested
     if let Some(element_id) = debug_element {
         debug_element_analysis(element_id, &data).await?;
-        return Ok(());
+        return Ok(())
     }
 
     // Set up analyzer registry
     let registry = if validate {
-        create_validation_registry()
+        create_validation_registry(cluster_distance)
     } else {
-        create_and_populate_registry()
+        create_and_populate_registry(cluster_distance)
     };
 
     // Run analysis
@@ -221,7 +228,7 @@ async fn analyze_command(
 }
 
 fn list_analyzers() {
-    let registry = create_and_populate_registry();
+    let registry = create_and_populate_registry(50.0); // Use default for listing
 
     eprintln!("Available analyzers:");
     for info in registry.get_all_info() {
@@ -542,7 +549,7 @@ async fn debug_pedestrian_analysis(
         );
         eprintln!("  - Has 'sidewalk' tag (excluded)");
         eprintln!("  - Not within bounding box");
-        return Ok(());
+        return Ok(())
     }
 
     // Step 2: Spatial Context
@@ -618,7 +625,8 @@ async fn debug_pedestrian_analysis(
 
         eprintln!(
             "Distance threshold for {}: {}m",
-            highway_type, distance_threshold
+            highway_type,
+            distance_threshold
         );
         eprintln!(
             "Parallel sidewalks for coverage calc: {}",

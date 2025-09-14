@@ -3,17 +3,21 @@ pub mod data;
 pub mod geometry_simd;
 pub mod graph;
 pub mod intersections;
+pub mod severity;
 pub mod spatial;
 pub mod spatial_index;
 pub mod streaming;
+pub mod tags;
 
 pub use analysis::*;
 pub use data::*;
 pub use geometry_simd::*;
 pub use graph::*;
+pub use severity::*;
 pub use spatial::*;
 pub use spatial_index::*;
 pub use streaming::*;
+pub use tags::*;
 
 #[cfg(test)]
 mod tests {

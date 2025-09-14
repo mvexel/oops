@@ -1,5 +1,4 @@
 use crate::data::{BoundingBox, OsmData, OsmId};
-use crate::intersections::is_road_way;
 use crate::spatial::calculate_linestring_to_linestring_distance;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -237,14 +236,22 @@ impl ElementSelector for WaySelector {
 }
 
 /// Selects intersection nodes
-pub struct IntersectionSelector;
+pub struct IntersectionSelector {
+    pub cluster_distance: f64,
+}
+
+impl IntersectionSelector {
+    pub fn new(cluster_distance: f64) -> Self {
+        Self { cluster_distance }
+    }
+}
 
 impl ElementSelector for IntersectionSelector {
     fn select_elements(&self, data: &OsmData, query: &AnalysisQuery) -> Vec<SelectedElement> {
+        use crate::intersections::IntersectionIndex;
         use geo::Rect;
 
-        // Convert AnalysisQuery area to geo::Rect for bbox operations
-        let _bbox = Some(Rect::new(
+        let bbox = Rect::new(
             geo::Coord {
                 x: query.area.min_lon,
                 y: query.area.min_lat,
@@ -253,41 +260,41 @@ impl ElementSelector for IntersectionSelector {
                 x: query.area.max_lon,
                 y: query.area.max_lat,
             },
-        ));
+        );
 
-        let mut selected_elements = Vec::new();
+        let intersection_index = IntersectionIndex::build(data, Some(bbox));
+        let (road_graph, node_map) = crate::graph::build_road_network(data);
 
-        // Get traditional topological intersections
-        let topo_intersections: Vec<_> = data
-            .nodes
-            .values()
-            .filter(|node| query.area.contains_point(node.lon, node.lat))
-            .filter(|node| {
-                let degree = data
-                    .ways
-                    .values()
-                    .filter(|way| is_road_way(way))
-                    .filter(|way| way.nodes.contains(&node.id))
-                    .count();
-                degree >= 3
+        let logical_intersections = intersection_index.get_logical_intersections(
+            self.cluster_distance,
+            Some((&road_graph, &node_map)),
+        );
+
+        logical_intersections
+            .into_iter()
+            .filter_map(|li| {
+                data.nodes.get(&li.representative_node).map(|node| {
+                    let mut tags = node.tags.clone();
+                    tags.insert(
+                        "cluster_nodes".to_string(),
+                        li.node_cluster
+                            .iter()
+                            .map(|id| id.to_string())
+                            .collect::<Vec<_>>()
+                            .join(","),
+                    );
+                    SelectedElement {
+                        element_id: li.representative_node,
+                        element_type: ElementType::Node,
+                        tags,
+                        geometry: ElementGeometry::Point {
+                            lat: node.lat,
+                            lon: node.lon,
+                        },
+                    }
+                })
             })
-            .map(|node| SelectedElement {
-                element_id: node.id,
-                element_type: ElementType::Node,
-                tags: node.tags.clone(),
-                geometry: ElementGeometry::Point {
-                    lat: node.lat,
-                    lon: node.lon,
-                },
-            })
-            .collect();
-
-        selected_elements.extend(topo_intersections);
-
-        // Note: Geometric intersections will be handled by the context provider for efficiency
-        // The SpatialIndex has access to optimized intersection detection methods
-
-        selected_elements
+            .collect()
     }
 }
 
@@ -424,6 +431,158 @@ impl ContextProvider for SpatialContext {
             element: element.clone(),
             spatial_context: SpatialContextData { nearby_ways },
             metadata: HashMap::new(),
+        }
+    }
+}
+
+/// Context provider that clusters nearby intersection nodes into logical intersections
+pub struct IntersectionContextProvider;
+
+impl IntersectionContextProvider {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl ContextProvider for IntersectionContextProvider {
+    fn enrich_context(
+        &self,
+        element: &SelectedElement,
+        spatial_index: &AnalysisSpatialIndex,
+    ) -> EnrichedContext {
+        let mut metadata = HashMap::new();
+        let osm_data = spatial_index.osm_data();
+
+        let cluster_nodes: Vec<i64> = element
+            .tags
+            .get("cluster_nodes")
+            .map(|s| s.split(',').filter_map(|n| n.parse().ok()).collect())
+            .unwrap_or_else(|| vec![element.element_id]);
+
+        // Use efficient node-to-ways index instead of iterating through all ways
+        let node_to_ways = crate::intersections::build_node_to_ways_index(osm_data);
+        let mut connected_ways = std::collections::HashSet::new();
+        
+        for &node_id in &cluster_nodes {
+            if let Some(way_ids) = node_to_ways.get(&node_id) {
+                for &way_id in way_ids {
+                    connected_ways.insert(way_id);
+                }
+            }
+        }
+
+        let degree = connected_ways.len();
+        let intersection_type = match degree {
+            3 => "3-way".to_string(),
+            4 => "4-way".to_string(),
+            d if d >= 5 => "complex".to_string(),
+            _ => "simple".to_string(),
+        };
+
+        let roundabout_ways: Vec<i64> = connected_ways.iter().filter_map(|&way_id| {
+            osm_data.ways.get(&way_id).and_then(|w| {
+                if w.tags.get("junction") == Some(&"roundabout".to_string()) {
+                    Some(way_id)
+                } else {
+                    None
+                }
+            })
+        }).collect();
+
+        let has_roundabout = !roundabout_ways.is_empty();
+        
+        let final_type = if has_roundabout {
+            "roundabout".to_string()
+        } else if cluster_nodes.len() > 1 {
+            "complex".to_string()
+        } else {
+            intersection_type
+        };
+
+        metadata.insert("degree".to_string(), degree.to_string());
+        metadata.insert("intersection_type".to_string(), final_type);
+        metadata.insert("cluster_size".to_string(), cluster_nodes.len().to_string());
+        metadata.insert(
+            "node_cluster".to_string(),
+            cluster_nodes.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","),
+        );
+        metadata.insert(
+            "connected_ways".to_string(),
+            connected_ways.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","),
+        );
+        
+        if has_roundabout {
+            metadata.insert(
+                "roundabout_ways".to_string(),
+                roundabout_ways.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","),
+            );
+        }
+
+        // Count one-way roads and their direction relative to intersection nodes
+        let mut oneway_departing = 0;
+        let mut oneway_arriving = 0;
+        let mut oneway_ways_departing = Vec::new();
+        let mut oneway_ways_arriving = Vec::new();
+        
+        for &way_id in &connected_ways {
+            if let Some(way) = osm_data.ways.get(&way_id) {
+                let is_oneway = way.tags.get("oneway").map_or(false, |v| v == "yes");
+                let is_reverse_oneway = way.tags.get("oneway").map_or(false, |v| v == "-1");
+                
+                if is_oneway || is_reverse_oneway {
+                    // Determine direction relative to intersection nodes
+                    // Check if any cluster node is at the start or end of the way
+                    let first_node = way.nodes.first().copied();
+                    let last_node = way.nodes.last().copied();
+                    
+                    let cluster_at_start = cluster_nodes.iter().any(|&n| Some(n) == first_node);
+                    let cluster_at_end = cluster_nodes.iter().any(|&n| Some(n) == last_node);
+                    
+                    if is_oneway {
+                        if cluster_at_start {
+                            oneway_departing += 1;
+                            oneway_ways_departing.push(way_id);
+                        }
+                        if cluster_at_end {
+                            oneway_arriving += 1;
+                            oneway_ways_arriving.push(way_id);
+                        }
+                    } else if is_reverse_oneway {
+                        // Reverse oneway: traffic flows opposite to way direction
+                        if cluster_at_start {
+                            oneway_arriving += 1;
+                            oneway_ways_arriving.push(way_id);
+                        }
+                        if cluster_at_end {
+                            oneway_departing += 1;
+                            oneway_ways_departing.push(way_id);
+                        }
+                    }
+                }
+            }
+        }
+        
+        metadata.insert("oneway_departing_count".to_string(), oneway_departing.to_string());
+        metadata.insert("oneway_arriving_count".to_string(), oneway_arriving.to_string());
+        
+        if !oneway_ways_departing.is_empty() {
+            metadata.insert(
+                "oneway_ways_departing".to_string(),
+                oneway_ways_departing.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","),
+            );
+        }
+        
+        if !oneway_ways_arriving.is_empty() {
+            metadata.insert(
+                "oneway_ways_arriving".to_string(),
+                oneway_ways_arriving.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","),
+            );
+        }
+
+        EnrichedContext {
+            element: element.clone(),
+            spatial_context: SpatialContextData::default(),
+            metadata,
         }
     }
 }
