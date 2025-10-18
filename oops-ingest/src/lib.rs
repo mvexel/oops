@@ -109,6 +109,17 @@ mod tests {
         progress.report_progress(10000, "checkpoint"); // Should print
     }
 
+    #[test]
+    fn test_parallel_processing_trait_bounds() {
+        // This test verifies that ProgressReporter is Sync and can be used in parallel contexts
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<ConsoleProgress>();
+        assert_sync::<NoOpProgress>();
+        
+        // Verify that our parallel implementation compiles
+        // (the fact this test compiles proves the trait bounds are correct)
+    }
+
     // Integration test with Salt Lake City sample data
     #[tokio::test]
     #[ignore] // Run with: cargo test -- --ignored
