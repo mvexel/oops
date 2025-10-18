@@ -1,10 +1,13 @@
 use crate::Result;
+use dashmap::DashMap;
 use oops_core::{BoundingBox, MemberType, OsmData, OsmNode, OsmRelation, OsmWay, RelationMember};
 use osmpbf::{Element, ElementReader};
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub trait ProgressReporter {
+pub trait ProgressReporter: Sync {
     fn report_progress(&self, processed: usize, message: &str);
 }
 
@@ -54,7 +57,6 @@ impl PbfReader {
         progress: &dyn ProgressReporter,
     ) -> Result<OsmData> {
         let filter = filter.unwrap_or_default();
-        let reader = ElementReader::from_path(&path)?;
         let mut osm_data = OsmData::new();
         
         // Extract boundary from PBF header
@@ -75,121 +77,161 @@ impl PbfReader {
                 }
             }
         }
-        let mut count = 0;
-        let mut total_processed = 0;
 
-        /*
-        TODO #1 implement parallel processing
-        */
-        reader.for_each(|element| {
-            total_processed += 1;
+        // Create thread-safe collections for parallel processing
+        let nodes = DashMap::new();
+        let ways = DashMap::new();
+        let relations = DashMap::new();
+        let atomic_count = AtomicUsize::new(0);
+        let atomic_total = AtomicUsize::new(0);
 
-            match element {
-                Element::Node(node) => {
-                    if !filter.include_nodes {
+        // Process blobs in parallel using BlobReader
+        let blob_reader = osmpbf::BlobReader::from_path(&path)?;
+        
+        blob_reader
+            .par_bridge()
+            .for_each(|blob_result| {
+                if let Ok(blob) = blob_result {
+                    // Skip header blocks
+                    if matches!(blob.get_type(), osmpbf::BlobType::OsmHeader) {
                         return;
                     }
+                    
+                    // Decode the primitive block
+                    if let Ok(primitive_block) = blob.to_primitiveblock() {
+                        // Process all groups in this block
+                        for group in primitive_block.groups() {
+                            // Process nodes
+                            for node in group.nodes() {
+                                let total = atomic_total.fetch_add(1, Ordering::Relaxed) + 1;
+                                
+                                if !filter.include_nodes {
+                                    continue;
+                                }
 
-                    let osm_node = OsmNode {
-                        id: node.id(),
-                        lat: node.lat(),
-                        lon: node.lon(),
-                        tags: node
-                            .tags()
-                            .map(|(k, v)| (k.into(), v.into()))
-                            .collect(),
-                    };
+                                let osm_node = OsmNode {
+                                    id: node.id(),
+                                    lat: node.lat(),
+                                    lon: node.lon(),
+                                    tags: node
+                                        .tags()
+                                        .map(|(k, v)| (k.into(), v.into()))
+                                        .collect(),
+                                };
 
-                    if !self.node_matches_filter(&osm_node, &filter) {
-                        return;
+                                if !self.node_matches_filter(&osm_node, &filter) {
+                                    continue;
+                                }
+
+                                nodes.insert(osm_node.id, osm_node);
+                                let count = atomic_count.fetch_add(1, Ordering::Relaxed) + 1;
+                                progress.report_progress(total, &format!("Added {} elements", count));
+                            }
+
+                            // Process dense nodes
+                            for node in group.dense_nodes() {
+                                let total = atomic_total.fetch_add(1, Ordering::Relaxed) + 1;
+                                
+                                if !filter.include_nodes {
+                                    continue;
+                                }
+
+                                let osm_node = OsmNode {
+                                    id: node.id(),
+                                    lat: node.lat(),
+                                    lon: node.lon(),
+                                    tags: node
+                                        .tags()
+                                        .map(|(k, v)| (k.into(), v.into()))
+                                        .collect(),
+                                };
+
+                                if !self.node_matches_filter(&osm_node, &filter) {
+                                    continue;
+                                }
+
+                                nodes.insert(osm_node.id, osm_node);
+                                let count = atomic_count.fetch_add(1, Ordering::Relaxed) + 1;
+                                progress.report_progress(total, &format!("Added {} elements", count));
+                            }
+
+                            // Process ways
+                            for way in group.ways() {
+                                let total = atomic_total.fetch_add(1, Ordering::Relaxed) + 1;
+                                
+                                if !filter.include_ways {
+                                    continue;
+                                }
+
+                                let osm_way = OsmWay {
+                                    id: way.id(),
+                                    nodes: way.refs().collect(),
+                                    tags: way
+                                        .tags()
+                                        .map(|(k, v)| (k.into(), v.into()))
+                                        .collect(),
+                                };
+
+                                if !self.way_matches_filter(&osm_way, &filter) {
+                                    continue;
+                                }
+
+                                ways.insert(osm_way.id, osm_way);
+                                let count = atomic_count.fetch_add(1, Ordering::Relaxed) + 1;
+                                progress.report_progress(total, &format!("Added {} elements", count));
+                            }
+
+                            // Process relations
+                            for relation in group.relations() {
+                                let total = atomic_total.fetch_add(1, Ordering::Relaxed) + 1;
+                                
+                                if !filter.include_relations {
+                                    continue;
+                                }
+
+                                let members = relation
+                                    .members()
+                                    .map(|member| RelationMember {
+                                        member_type: match member.member_type {
+                                            osmpbf::RelMemberType::Node => MemberType::Node,
+                                            osmpbf::RelMemberType::Way => MemberType::Way,
+                                            osmpbf::RelMemberType::Relation => MemberType::Relation,
+                                        },
+                                        member_id: member.member_id,
+                                        role: member.role().unwrap_or("").into(),
+                                    })
+                                    .collect();
+
+                                let osm_relation = OsmRelation {
+                                    id: relation.id(),
+                                    members,
+                                    tags: relation
+                                        .tags()
+                                        .map(|(k, v)| (k.into(), v.into()))
+                                        .collect(),
+                                };
+
+                                if !self.relation_matches_filter(&osm_relation, &filter) {
+                                    continue;
+                                }
+
+                                relations.insert(osm_relation.id, osm_relation);
+                                let count = atomic_count.fetch_add(1, Ordering::Relaxed) + 1;
+                                progress.report_progress(total, &format!("Added {} elements", count));
+                            }
+                        }
                     }
-
-                    osm_data.add_node(osm_node);
-                    count += 1;
-                    progress.report_progress(total_processed, &format!("Added {} elements", count));
                 }
-                Element::DenseNode(node) => {
-                    if !filter.include_nodes {
-                        return;
-                    }
+            });
 
-                    let osm_node = OsmNode {
-                        id: node.id(),
-                        lat: node.lat(),
-                        lon: node.lon(),
-                        tags: node
-                            .tags()
-                            .map(|(k, v)| (k.into(), v.into()))
-                            .collect(),
-                    };
-
-                    if !self.node_matches_filter(&osm_node, &filter) {
-                        return;
-                    }
-
-                    osm_data.add_node(osm_node);
-                    count += 1;
-                    progress.report_progress(total_processed, &format!("Added {} elements", count));
-                }
-                Element::Way(way) => {
-                    if !filter.include_ways {
-                        return;
-                    }
-
-                    let osm_way = OsmWay {
-                        id: way.id(),
-                        nodes: way.refs().collect(),
-                        tags: way
-                            .tags()
-                            .map(|(k, v)| (k.into(), v.into()))
-                            .collect(),
-                    };
-
-                    if !self.way_matches_filter(&osm_way, &filter) {
-                        return;
-                    }
-
-                    osm_data.ways.insert(osm_way.id, osm_way);
-                    count += 1;
-                    progress.report_progress(total_processed, &format!("Added {} elements", count));
-                }
-                Element::Relation(relation) => {
-                    if !filter.include_relations {
-                        return;
-                    }
-
-                    let members = relation
-                        .members()
-                        .map(|member| RelationMember {
-                            member_type: match member.member_type {
-                                osmpbf::RelMemberType::Node => MemberType::Node,
-                                osmpbf::RelMemberType::Way => MemberType::Way,
-                                osmpbf::RelMemberType::Relation => MemberType::Relation,
-                            },
-                            member_id: member.member_id,
-                            role: member.role().unwrap_or("").into(),
-                        })
-                        .collect();
-
-                    let osm_relation = OsmRelation {
-                        id: relation.id(),
-                        members,
-                        tags: relation
-                            .tags()
-                            .map(|(k, v)| (k.into(), v.into()))
-                            .collect(),
-                    };
-
-                    if !self.relation_matches_filter(&osm_relation, &filter) {
-                        return;
-                    }
-
-                    osm_data.relations.insert(osm_relation.id, osm_relation);
-                    count += 1;
-                    progress.report_progress(total_processed, &format!("Added {} elements", count));
-                }
-            }
-        })?;
+        // Convert DashMap to regular HashMap for OsmData
+        osm_data.ways = ways.into_iter().collect();
+        osm_data.relations = relations.into_iter().collect();
+        
+        // Add nodes to osm_data, which will also update the spatial index
+        for (_, node) in nodes.into_iter() {
+            osm_data.add_node(node);
+        }
 
         Ok(osm_data)
     }
