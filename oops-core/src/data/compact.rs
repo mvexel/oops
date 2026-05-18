@@ -148,7 +148,7 @@ impl CompactNodeList {
         Self { first_node, deltas }
     }
 
-    pub fn iter(&self) -> CompactNodeIterator {
+    pub fn iter(&self) -> CompactNodeIterator<'_> {
         CompactNodeIterator {
             first_node: self.first_node,
             deltas: &self.deltas,
