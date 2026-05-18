@@ -161,9 +161,11 @@ impl WaySelector {
 
 impl ElementSelector for WaySelector {
     fn select_elements(&self, data: &OsmData, query: &AnalysisQuery) -> Vec<SelectedElement> {
+        use rayon::prelude::*;
+
         data.ways
-            .values()
-            .filter(|way| {
+            .par_iter()
+            .filter(|(_, way)| {
                 // Highway type check
                 if !self.highway_types.is_empty() {
                     match way.tags.get("highway") {
@@ -181,7 +183,7 @@ impl ElementSelector for WaySelector {
 
                 true
             })
-            .filter_map(|way| {
+            .filter_map(|(_, way)| {
                 // Spatial filter - way in query area
                 let has_nodes_in_area = way.nodes.iter().any(|&node_id| {
                     if let Some(node) = data.get_node(node_id) {

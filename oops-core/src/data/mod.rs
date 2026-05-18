@@ -155,6 +155,31 @@ impl OsmData {
         }
     }
 
+    pub fn from_parts(
+        nodes: HashMap<OsmId, OsmNode>,
+        ways: HashMap<OsmId, OsmWay>,
+        relations: HashMap<OsmId, OsmRelation>,
+        boundary: Option<BoundingBox>,
+    ) -> Self {
+        let node_index = RTree::bulk_load(
+            nodes
+                .values()
+                .map(|node| NodeIndex {
+                    node: node.clone(),
+                    point: node.to_point(),
+                })
+                .collect(),
+        );
+
+        Self {
+            nodes,
+            ways,
+            relations,
+            boundary,
+            node_index,
+        }
+    }
+
     pub fn add_node(&mut self, node: OsmNode) {
         let point = node.to_point();
         let index_entry = NodeIndex {
@@ -212,19 +237,12 @@ impl OsmData {
 
 impl Clone for OsmData {
     fn clone(&self) -> Self {
-        let mut cloned = Self::new();
-
-        // Clone all nodes (this will rebuild the spatial index)
-        for node in self.nodes.values() {
-            cloned.add_node(node.clone());
-        }
-
-        // Clone ways, relations, and boundary
-        cloned.ways = self.ways.clone();
-        cloned.relations = self.relations.clone();
-        cloned.boundary = self.boundary.clone();
-
-        cloned
+        Self::from_parts(
+            self.nodes.clone(),
+            self.ways.clone(),
+            self.relations.clone(),
+            self.boundary.clone(),
+        )
     }
 }
 
