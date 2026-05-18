@@ -3,6 +3,7 @@
 //! These functions demonstrate clean separation between generic core components
 //! and analyzer-specific detection logic.
 
+use crate::edge_crossing::{road_types, EdgeCrossingContextProvider, EdgeCrossingDetector};
 use crate::intersection::IntersectionDetector;
 use crate::missing_tag::MissingTagDetector;
 use crate::sidewalk_coverage::SidewalkCoverageDetector;
@@ -108,11 +109,24 @@ pub fn build_intersection_analyzer(cluster_distance: f64) -> Analyzer {
     )
 }
 
+/// Build an Atlas-style edge crossing analyzer
+pub fn build_edge_crossing_edge_analyzer() -> Analyzer {
+    Analyzer::new(
+        "edge_crossing_edge",
+        "1.0.0",
+        "Identifies road ways that cross without a shared node or layer separation",
+        Box::new(WaySelector::new().highway_types(road_types())),
+        Box::new(EdgeCrossingContextProvider::new()),
+        Box::new(EdgeCrossingDetector::new()),
+    )
+}
+
 /// Get all analyzers - demonstrates clean separation
 pub fn get_all_analyzers(cluster_distance: f64) -> Vec<Analyzer> {
     vec![
         build_missing_maxspeed_analyzer(), // Generic core + specific detector
         build_pedestrian_completeness_analyzer(), // Generic core + specific spatial detector
         build_intersection_analyzer(cluster_distance), // Composable intersection detection with clustering
+        build_edge_crossing_edge_analyzer(), // Atlas-style unsplit crossing road detector
     ]
 }
