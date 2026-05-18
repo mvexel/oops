@@ -2,9 +2,11 @@
 use oops_core::BoundingBox;
 use thiserror::Error;
 
+pub mod large_edge;
 pub mod overpass;
 pub mod pbf;
 
+pub use large_edge::*;
 pub use overpass::*;
 pub use pbf::*;
 

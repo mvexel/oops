@@ -1,12 +1,15 @@
 use clap::{Parser, Subcommand};
-use geo::{Euclidean, Geodesic, InterpolatableLine, Length};
+use geo::line_intersection::{line_intersection, LineIntersection};
+use geo::{BoundingRect, Euclidean, Geodesic, InterpolatableLine, Length, Point};
 use geojson::{Feature, FeatureCollection, GeoJson, Geometry, Value as GeoValue};
 use oops_analyzers::get_all_analyzers;
 use oops_core::{
     AnalysisQuery, AnalysisResult, AnalyzerRegistry, BoundingBox, ElementType, OsmData,
 };
-use oops_ingest::{OverpassClient, PbfFilter, PbfReader};
-use std::collections::HashMap;
+use oops_ingest::{LargeEdgeCrossingReader, OverpassClient, PbfFilter, PbfReader, ResolvedRoadWay};
+use rstar::{RTree, RTreeObject, AABB};
+use std::collections::{HashMap, HashSet};
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -57,6 +60,10 @@ enum Commands {
         /// Distance for clustering intersections (meters)
         #[arg(long, default_value = "50.0")]
         cluster_distance: f64,
+
+        /// Use bounded-memory large-file mode for supported analyzers
+        #[arg(long)]
+        stream_large: bool,
     },
     /// List available analyzers
     List,
@@ -85,6 +92,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             debug_element,
             validate,
             cluster_distance,
+            stream_large,
         } => {
             analyze_command(
                 file,
@@ -96,6 +104,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 debug_element,
                 validate,
                 cluster_distance,
+                stream_large,
             )
             .await?;
         }
@@ -133,6 +142,7 @@ async fn analyze_command(
     debug_element: Option<i64>,
     validate: bool,
     cluster_distance: f64,
+    stream_large: bool,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Parse bounding box if provided
     let query_bbox = if let Some(bbox_str) = bbox {
@@ -140,6 +150,10 @@ async fn analyze_command(
     } else {
         None
     };
+
+    if stream_large {
+        return analyze_large_command(file, analyzer, format, query_bbox);
+    }
 
     // Load data from file or Overpass API
     eprintln!("Loading OSM data...");
@@ -167,7 +181,7 @@ async fn analyze_command(
     // Debug specific element if requested
     if let Some(element_id) = debug_element {
         debug_element_analysis(element_id, &data).await?;
-        return Ok(())
+        return Ok(());
     }
 
     // Set up analyzer registry
@@ -233,6 +247,230 @@ fn list_analyzers() {
     eprintln!("Available analyzers:");
     for info in registry.get_all_info() {
         eprintln!("  {} (v{}) - {}", info.name, info.version, info.description);
+    }
+}
+
+fn analyze_large_command(
+    file: Option<PathBuf>,
+    analyzer: Option<String>,
+    format: OutputFormat,
+    bbox: Option<BoundingBox>,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    if analyzer.as_deref() != Some("edge_crossing_edge") {
+        return Err("--stream-large currently supports only --analyzer edge_crossing_edge".into());
+    }
+
+    let Some(file) = file else {
+        return Err("--stream-large requires --file".into());
+    };
+
+    let roads = LargeEdgeCrossingReader::read_road_geometries(&file, bbox.as_ref())?;
+
+    match format {
+        OutputFormat::Summary => {
+            let mut count = 0usize;
+            detect_large_edge_crossings(&roads, |_feature| {
+                count += 1;
+                Ok(())
+            })?;
+            eprintln!("Analysis Summary:");
+            eprintln!("  Issues found: {}", count);
+        }
+        OutputFormat::Geojson => {
+            let stdout = std::io::stdout();
+            let mut writer = BufWriter::new(stdout.lock());
+            write!(writer, "{{\"type\":\"FeatureCollection\",\"features\":[")?;
+            let mut first = true;
+            let mut count = 0usize;
+
+            detect_large_edge_crossings(&roads, |feature| {
+                if !first {
+                    write!(writer, ",")?;
+                }
+                first = false;
+                count += 1;
+                serde_json::to_writer(&mut writer, &GeoJson::Feature(feature))?;
+                Ok(())
+            })?;
+
+            writeln!(writer, "]}}")?;
+            writer.flush()?;
+            eprintln!("Analysis complete: {} total findings", count);
+        }
+        OutputFormat::Json | OutputFormat::Csv => {
+            return Err("--stream-large currently supports --format summary or geojson".into());
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Clone)]
+struct RoadEnvelope {
+    index: usize,
+    envelope: AABB<[f64; 2]>,
+}
+
+impl RTreeObject for RoadEnvelope {
+    type Envelope = AABB<[f64; 2]>;
+
+    fn envelope(&self) -> Self::Envelope {
+        self.envelope
+    }
+}
+
+fn detect_large_edge_crossings<F>(
+    roads: &[ResolvedRoadWay],
+    mut emit: F,
+) -> std::result::Result<(), Box<dyn std::error::Error>>
+where
+    F: FnMut(Feature) -> std::result::Result<(), Box<dyn std::error::Error>>,
+{
+    let entries: Vec<_> = roads
+        .iter()
+        .enumerate()
+        .filter_map(|(index, road)| {
+            let bbox = road.geometry.bounding_rect()?;
+            Some(RoadEnvelope {
+                index,
+                envelope: AABB::from_corners(
+                    [bbox.min().x, bbox.min().y],
+                    [bbox.max().x, bbox.max().y],
+                ),
+            })
+        })
+        .collect();
+    let index = RTree::bulk_load(entries.clone());
+    let mut seen = HashSet::new();
+
+    for entry in &entries {
+        let target = &roads[entry.index];
+        for candidate_entry in index.locate_in_envelope_intersecting(&entry.envelope) {
+            if candidate_entry.index == entry.index {
+                continue;
+            }
+
+            let crossing = &roads[candidate_entry.index];
+            if target.id >= crossing.id
+                || large_ways_share_node(target, crossing)
+                || large_has_layer_separation(target, crossing)
+            {
+                continue;
+            }
+
+            for point in large_crossing_points(target, crossing) {
+                let key = (
+                    target.id,
+                    crossing.id,
+                    (point.x() * 10_000_000.0).round() as i64,
+                    (point.y() * 10_000_000.0).round() as i64,
+                );
+                if !seen.insert(key) {
+                    continue;
+                }
+                emit(large_edge_crossing_feature(target, crossing, point))?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn large_ways_share_node(way1: &ResolvedRoadWay, way2: &ResolvedRoadWay) -> bool {
+    let (smaller, larger) = if way1.node_ids.len() <= way2.node_ids.len() {
+        (&way1.node_ids, &way2.node_ids)
+    } else {
+        (&way2.node_ids, &way1.node_ids)
+    };
+    let node_ids: HashSet<_> = smaller.iter().collect();
+    larger.iter().any(|node| node_ids.contains(node))
+}
+
+fn large_has_layer_separation(way1: &ResolvedRoadWay, way2: &ResolvedRoadWay) -> bool {
+    let layer1 = way1
+        .tags
+        .get("layer")
+        .and_then(|value| value.parse::<i32>().ok());
+    let layer2 = way2
+        .tags
+        .get("layer")
+        .and_then(|value| value.parse::<i32>().ok());
+
+    matches!((layer1, layer2), (Some(a), Some(b)) if a != b)
+        || matches!((layer1, layer2), (Some(a), None) if a != 0)
+        || matches!((layer1, layer2), (None, Some(b)) if b != 0)
+}
+
+fn large_crossing_points(way1: &ResolvedRoadWay, way2: &ResolvedRoadWay) -> Vec<Point> {
+    let mut crossings = Vec::new();
+    for line1 in way1.geometry.lines() {
+        for line2 in way2.geometry.lines() {
+            if let Some(LineIntersection::SinglePoint { intersection, .. }) =
+                line_intersection(line1, line2)
+            {
+                crossings.push(Point::from(intersection));
+            }
+        }
+    }
+    crossings
+}
+
+fn large_edge_crossing_feature(
+    target: &ResolvedRoadWay,
+    crossing: &ResolvedRoadWay,
+    point: Point,
+) -> Feature {
+    let mut properties = serde_json::Map::new();
+    properties.insert(
+        "element_id".to_string(),
+        serde_json::Value::Number(target.id.into()),
+    );
+    properties.insert(
+        "analyzer".to_string(),
+        serde_json::Value::String("edge_crossing_edge".to_string()),
+    );
+    properties.insert(
+        "severity".to_string(),
+        serde_json::Value::String("High".to_string()),
+    );
+    properties.insert(
+        "message".to_string(),
+        serde_json::Value::String(format!(
+            "Road crosses way {} without a shared node or explicit layer separation",
+            crossing.id
+        )),
+    );
+    properties.insert(
+        "context_crossing_way_id".to_string(),
+        serde_json::Value::String(crossing.id.to_string()),
+    );
+    properties.insert(
+        "context_crossing_lon".to_string(),
+        serde_json::Value::String(format!("{:.7}", point.x())),
+    );
+    properties.insert(
+        "context_crossing_lat".to_string(),
+        serde_json::Value::String(format!("{:.7}", point.y())),
+    );
+    if let Some(highway) = target.tags.get("highway") {
+        properties.insert(
+            "context_target_highway".to_string(),
+            serde_json::Value::String(highway.clone()),
+        );
+    }
+    if let Some(highway) = crossing.tags.get("highway") {
+        properties.insert(
+            "context_crossing_highway".to_string(),
+            serde_json::Value::String(highway.clone()),
+        );
+    }
+
+    Feature {
+        bbox: None,
+        geometry: Some(Geometry::new(GeoValue::Point(vec![point.x(), point.y()]))),
+        id: None,
+        properties: Some(properties),
+        foreign_members: None,
     }
 }
 
@@ -549,7 +787,7 @@ async fn debug_pedestrian_analysis(
         );
         eprintln!("  - Has 'sidewalk' tag (excluded)");
         eprintln!("  - Not within bounding box");
-        return Ok(())
+        return Ok(());
     }
 
     // Step 2: Spatial Context
@@ -625,8 +863,7 @@ async fn debug_pedestrian_analysis(
 
         eprintln!(
             "Distance threshold for {}: {}m",
-            highway_type,
-            distance_threshold
+            highway_type, distance_threshold
         );
         eprintln!(
             "Parallel sidewalks for coverage calc: {}",
